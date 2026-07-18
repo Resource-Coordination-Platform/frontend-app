@@ -22,6 +22,16 @@ export default function WelcomeScreen() {
       >
         <Text style={styles.btnText}>Offer Help (මට උදව් කළ හැක)</Text>
       </TouchableOpacity>
+
+    
+
+      <TouchableOpacity onPress={() => router.push('/login')} style={{ marginTop: 20 }}>
+        <Text style={{ color: 'blue', fontSize: 16 }}>Already have an account? Login here</Text>
+      </TouchableOpacity>
+
+
+
+
     </View>
   );
 }
