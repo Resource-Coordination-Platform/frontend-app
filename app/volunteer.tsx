@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Switch, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Button,TextInput } from 'react-native';
+import { View, Text, Switch, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Button,TextInput,RefreshControl } from 'react-native';//refresh control used to pull screen and refresh for new events
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 import { useRouter } from 'expo-router';
@@ -44,9 +44,14 @@ export default function VolunteerDashboard() {
       const assignmentsRes = await axios.get(`${BACKEND_URL}/volunteer/assignments`, config);
       setAssignments(assignmentsRes.data);
 
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'දත්ත ලබාගැනීමේදී දෝෂයක් ඇතිවිය.');
+    } catch (error: any) {
+      if (error.response?.status === 401) {
+        Alert.alert('Session Expired', 'ඔබගේ සැසිය අවසන් වී ඇත. කරුණාකර නැවත Login වන්න.');
+        handleLogout(); // ඉබේම ලොග් අවුට් කරනවා
+      } else {
+        console.error(error);
+        Alert.alert('Error', 'දත්ත ලබාගැනීමේදී දෝෂයක් ඇතිවිය.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -109,9 +114,9 @@ export default function VolunteerDashboard() {
     } catch (error: any) {
       console.error(error);
       if (error.response?.status === 409) {
-        Alert.alert('Too Late', 'Maaf kijiye, yeh mission kisi aur volunteer ne accept kar liya hai (Quota Full).');
+        Alert.alert('Too Late', 'කණගාටුයි, මෙම කාර්යය දැනටමත් වෙනත් ස්වේච්ඡා සේවකයෙකු විසින් භාරගෙන ඇත (සීමාව සම්පූර්ණයි)..');
       } else {
-        Alert.alert('Error', 'Assignment accept karne mein problem aayi.');
+        Alert.alert('Error', 'Assignment accept problem got.');
       }
     }
   };
@@ -121,11 +126,11 @@ export default function VolunteerDashboard() {
     try {
       const config = await getAuthHeader();
       await axios.post(`${BACKEND_URL}/volunteer/assignments/${assignmentId}/decline`, {}, config);
-      Alert.alert('Declined', 'Aapne assignment decline kar diya hai.');
-      fetchDashboardData(); // List ko refresh karne ke liye
+      Alert.alert('Declined', 'you have declined the assignment.');
+      fetchDashboardData(); // refresh the list after declining
     } catch (error) {
       console.error(error);
-      Alert.alert('Error', 'Assignment decline karne mein problem aayi.');
+      Alert.alert('Error', 'Assignment decline problem got.');
     }
   };
 
