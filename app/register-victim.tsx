@@ -65,7 +65,7 @@ export default function RegisterHelper() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Offer Help (Volunteer Registration)</Text>
+      <Text style={styles.title}>Register as a Victim</Text>
       
       <TextInput 
         style={styles.input} 
