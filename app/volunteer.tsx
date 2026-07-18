@@ -196,6 +196,9 @@ export default function VolunteerDashboard() {
         <FlatList
           data={assignments}
           keyExtractor={(item) => item.id}
+          refreshControl={
+            <RefreshControl refreshing={isLoading} onRefresh={fetchDashboardData} />
+          }
           renderItem={({ item }) => (
             <View style={styles.assignmentCard}>
               <Text style={styles.assignmentStatus}>Status: {item.status}</Text>
