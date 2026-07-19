@@ -22,23 +22,25 @@ export default function VolunteerDashboard() {
 
     const connectWebSocket = async () => {
       const token = await SecureStore.getItemAsync('access_token');
-      // Component එක unmount වෙලා නම් හෝ token නැත්නම් ඉස්සරහට යන්න එපා
       if (!token || !isMounted) return;
 
-      const WS_URL = `ws://172.20.10.5:8080/ws?token=${token}`; 
-      ws = new WebSocket(WS_URL);
+      // 🚨 Gateway එක (8000) වෙනුවට කෙලින්ම RTO Go Service එකට (8080) කතා කරමු!
+      const WS_URL = `ws://172.20.10.5:8080/ws`; 
+      
+      // Token එක Sub-protocol එකක් විදිහට යවනවා
+      ws = new WebSocket(WS_URL, ['bearer', token]);
 
       ws.onopen = () => console.log('✅ WebSocket ලයිව් සම්බන්ධ විය!');
       
       ws.onmessage = (event) => {
         console.log('🔔 නව පණිවිඩයක් ආවා:', event.data);
         fetchDashboardData();
-        Alert.alert('🚨 හදිසි ආපදාවක්!', 'ඔබට නව මෙහෙයුමක් ලැබී ඇත.');
+        Alert.alert('🚨 හදිසි ආපදාවක්!', 'ඔබට නව මෙහෙයුමක් ලැබී ඇත. කරුණාකර පරීක්ෂා කරන්න.');
       };
 
-      ws.onclose = () => console.log('❌ WebSocket විසන්ධි විය');
+      // ඇයි කට් වෙන්නේ කියලා හරියටම බලාගන්න code එකයි reason එකයි print කරමු
+      ws.onclose = (e) => console.log(`❌ WebSocket විසන්ධි විය. Code: ${e.code}, Reason: ${e.reason}`);
     };
-
     connectWebSocket();
 
     // Component එකෙන් අයින් වෙද්දී (Unmount) connection එක හරියටම වහනවා
