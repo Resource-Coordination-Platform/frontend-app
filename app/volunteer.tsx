@@ -14,7 +14,40 @@ export default function VolunteerDashboard() {
   const [district, setDistrict] = useState('');
 
   useEffect(() => {
-    fetchDashboardData();
+   fetchDashboardData();
+   
+
+    let ws: WebSocket | null = null;
+    let isMounted = true; // Component එක live ද කියලා බලන්න
+
+    const connectWebSocket = async () => {
+      const token = await SecureStore.getItemAsync('access_token');
+      // Component එක unmount වෙලා නම් හෝ token නැත්නම් ඉස්සරහට යන්න එපා
+      if (!token || !isMounted) return;
+
+      const WS_URL = `ws://172.20.10.5:8080/ws?token=${token}`; 
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => console.log('✅ WebSocket ලයිව් සම්බන්ධ විය!');
+      
+      ws.onmessage = (event) => {
+        console.log('🔔 නව පණිවිඩයක් ආවා:', event.data);
+        fetchDashboardData();
+        Alert.alert('🚨 හදිසි ආපදාවක්!', 'ඔබට නව මෙහෙයුමක් ලැබී ඇත.');
+      };
+
+      ws.onclose = () => console.log('❌ WebSocket විසන්ධි විය');
+    };
+
+    connectWebSocket();
+
+    // Component එකෙන් අයින් වෙද්දී (Unmount) connection එක හරියටම වහනවා
+    return () => {
+      isMounted = false;
+      if (ws) {
+        ws.close();
+      }
+    };
   }, []);
 
   const getAuthHeader = async () => {
