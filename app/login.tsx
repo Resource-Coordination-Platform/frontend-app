@@ -29,7 +29,7 @@ export default function LoginScreen() {
       // දැනට හැමෝම volunteer කියලා හිතමු (පස්සේ මේක හරියටම හදමු)
       await SecureStore.setItemAsync('user_role', 'volunteer'); 
 
-      router.replace('/volunteer');
+      router.replace('/(tabs)');
     } catch (error: any) {
       console.error(error);
       Alert.alert('Login Failed', 'Email හෝ Password වැරදියි.');
