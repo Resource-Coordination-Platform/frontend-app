@@ -186,6 +186,40 @@ export default function VolunteerDashboard() {
       </View>
     );
   }
+  
+  // Assignment එක EN-ROUTE (ස්ථානයට යන ගමන්) කිරීම
+  const handleEnRoute = async (assignmentId: string) => {
+    try {
+      const config = await getAuthHeader();
+      await axios.post(`${BACKEND_URL}/volunteer/assignments/${assignmentId}/en-route`, {}, config);
+      Alert.alert('On the way!', 'ඔබ ස්ථානයට ගමන් කරන බව යාවත්කාලීන විය. පරිස්සමින් යන්න! 🚶‍♂️');
+      fetchDashboardData(); // List එක Refresh කරනවා
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Status යාවත්කාලීන කිරීම අසාර්ථකයි.');
+    }
+  };
+
+  // Assignment එක COMPLETE (මෙහෙයුම අවසන්) කිරීම
+  const handleComplete = async (assignmentId: string) => {
+    try {
+      const config = await getAuthHeader();
+      await axios.post(`${BACKEND_URL}/volunteer/assignments/${assignmentId}/complete`, {}, config);
+      Alert.alert('Mission Accomplished!', 'නියමයි! ඔබ සාර්ථකව මෙහෙයුම අවසන් කළා. ඔබට බොහොම ස්තූතියි! 🏆');
+      fetchDashboardData(); // List එක Refresh කරනවා
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Status යාවත්කාලීන කිරීම අසාර්ථකයි.');
+    }
+  };
+
+
+
+
+
+
+
+
 
   return (
     <View style={styles.container}>
@@ -239,7 +273,7 @@ export default function VolunteerDashboard() {
               <Text style={styles.assignmentStatus}>Status: {item.status}</Text>
               <Text style={{ marginBottom: 10 }}>Mission ID: {item.event_id}</Text>
               
-              {/* NOTIFIED status par Accept/Decline buttons */}
+              {/* 1. NOTIFIED (අලුතින්ම ආපු එකක් නම්) */}
               {item.status === 'NOTIFIED' && (
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
                   <TouchableOpacity 
@@ -258,9 +292,31 @@ export default function VolunteerDashboard() {
                 </View>
               )}
 
-              {/* ACCEPTED status message */}
+              {/* 2. ACCEPTED (බාරගත්තට පස්සේ යන ගමන් කියලා දාන්න) */}
               {item.status === 'ACCEPTED' && (
-                 <Text style={{ color: 'blue', fontWeight: 'bold', marginTop: 10 }}>ඔබ මෙම මෙහෙයුම භාරගෙන ඇත! කරුණාකර ලබා දී ඇති ස්ථානය වෙත යන්න.</Text>
+                <TouchableOpacity 
+                  style={{ backgroundColor: '#33b5e5', padding: 12, borderRadius: 5, marginTop: 10, alignItems: 'center' }}
+                  onPress={() => handleEnRoute(item.id)}
+                >
+                  <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>🚶‍♂️ Mark En Route (යන ගමන්)</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* 3. EN_ROUTE (ස්ථානයට ගියාට පස්සේ වැඩේ ඉවරයි කියලා දාන්න) */}
+              {item.status === 'EN_ROUTE' && (
+                <TouchableOpacity 
+                  style={{ backgroundColor: '#FF8800', padding: 12, borderRadius: 5, marginTop: 10, alignItems: 'center' }}
+                  onPress={() => handleComplete(item.id)}
+                >
+                  <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>✅ Mark as Complete (අවසන් කළා)</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* 4. COMPLETED (වැඩේ ඉවර කරපු ඒවා) */}
+              {item.status === 'COMPLETED' && (
+                 <Text style={{ color: '#007E33', fontWeight: 'bold', marginTop: 10, textAlign: 'center', fontSize: 16 }}>
+                   🏆 මෙහෙයුම සාර්ථකව අවසන් කර ඇත!
+                 </Text>
               )}
             </View>
           )}
