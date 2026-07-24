@@ -33,7 +33,7 @@ export default function ProfileScreen() {
       const data = response.data;
       setBaseDistrict(data.base_district || '');
       setCity(data.city || '');
-      setIsAvailable(data.available_status === 'AVAILABLE');
+      setIsAvailable(data.available_status === false);
       // Skills array එකක් විදිහට එන්නේ, අපි ඒක කමා වලින් වෙන් කරපු string එකක් කරමු Text Input එකට
       if (data.skills && data.skills.length > 0) {
         setSkills(data.skills.join(', '));
@@ -58,13 +58,20 @@ export default function ProfileScreen() {
         base_district: baseDistrict,
         city: city,
         skills: skillsArray,
-        available_status: isAvailable ? 'AVAILABLE' : 'UNAVAILABLE'
+        available_status: isAvailable 
       };
 
       await axios.put(`${BACKEND_URL}/volunteer/profiles/me`, updateData, config);
       Alert.alert('Success', 'ඔබේ ගිණුම සාර්ථකව යාවත්කාලීන විය! 🚀');
-    } catch (error) {
-      console.error(error);
+
+      } catch (error: any) {
+      if (error.response) {
+        // Backend එකෙන් එන හරියටම වැරැද්ද මෙතනින් බලාගන්න පුළුවන් CUPIRI error handling
+        console.error("422 Error Details:", JSON.stringify(error.response.data, null, 2));
+      } else {
+        console.error("Other Error:", error.message);
+      }
+     
       Alert.alert('Error', 'යාවත්කාලීන කිරීම අසාර්ථකයි.');
     } finally {
       setIsSaving(false);
