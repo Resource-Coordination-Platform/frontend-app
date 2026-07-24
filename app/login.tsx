@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 
+
 const BACKEND_URL = 'http://172.20.10.5:8001/api';   // ඔයාගේ IP එක දාන්න
 
 export default function LoginScreen() {
@@ -29,7 +30,7 @@ export default function LoginScreen() {
       // දැනට හැමෝම volunteer කියලා හිතමු (පස්සේ මේක හරියටම හදමු)
       await SecureStore.setItemAsync('user_role', 'volunteer'); 
 
-      router.replace('/(tabs)');
+      router.replace('/volunteer');
     } catch (error: any) {
       console.error(error);
       Alert.alert('Login Failed', 'Email හෝ Password වැරදියි.');
