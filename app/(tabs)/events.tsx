@@ -40,7 +40,7 @@ export default function EventsFeed() {
     }
   };
 
-  
+
   // භයානකකම (Severity) අනුව පාට වෙනස් කරන්න පොඩි ෆන්ක්ෂන් එකක්
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -70,14 +70,15 @@ export default function EventsFeed() {
             <View style={styles.card}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 }}>
                 <Text style={styles.category}>
-                   {item.category.replace('_', ' ').toUpperCase()}
+                {item.title ? item.title.replace('_', ' ').toUpperCase() : 'EMERGENCY EVENT'}
+              
                 </Text>
                 <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(item.severity) }]}>
                   <Text style={styles.severityText}>{item.severity}</Text>
                 </View>
               </View>
               
-              <Text style={styles.details}>📍 ප්‍රදේශය: {item.district}</Text>
+              <Text style={styles.details}>📍 ප්‍රදේශය: {item.source_district}</Text>
               {item.city ? <Text style={styles.details}>🏙️ නගරය: {item.city}</Text> : null}
               <Text style={styles.details}>📌 තත්ත්වය: {item.status}</Text>
               
