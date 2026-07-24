@@ -20,18 +20,27 @@ export default function EventsFeed() {
   const fetchEvents = async () => {
     setIsLoading(true);
     try {
+      console.log("මම මේ ලින්ක් එකට තමයි යන්නේ: ", `${BACKEND_URL}/volunteer/events`); // ලින්ක් එක හරිද බලමු
+      
       const config = await getAuthHeader();
-      // Backend එකෙන් Events ලිස්ට් එක ඉල්ලනවා
       const response = await axios.get(`${BACKEND_URL}/volunteer/events`, config);
       setEvents(response.data);
-    } catch (error) {
-      console.error('Error fetching events:', error);
+    } catch (error: any) {
+      // මෙන්න මෙහෙමයි Error එකක් හරියටම පෝස්ට්මෝටම් කරන්නේ:
+      if (error.response) {
+        console.error("Backend එකෙන් ආපු අවුල:", error.response.status, error.response.data);
+      } else if (error.request) {
+        console.error("Backend එකට කතා කරන්න බැහැ (Server Down ද?):", error.request);
+      } else {
+        console.error("වෙනත් අවුලක්:", error.message);
+      }
       Alert.alert('Error', 'ආපදා තොරතුරු ලබා ගැනීමට නොහැකි විය.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  
   // භයානකකම (Severity) අනුව පාට වෙනස් කරන්න පොඩි ෆන්ක්ෂන් එකක්
   const getSeverityColor = (severity: string) => {
     switch (severity) {
