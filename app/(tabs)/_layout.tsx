@@ -8,7 +8,7 @@ export default function TabLayout() {
       headerShown: false // අපි හැම Screen එකකම වෙනම Header එකක් හදලා තියෙන නිසා මේක false කරමු
     }}>
       <Tabs.Screen
-        name="index"
+        name="volunteer"
         options={{
           title: 'Dashboard',
           tabBarIcon: ({ color }) => <Ionicons name="home" size={24} color={color} />,
