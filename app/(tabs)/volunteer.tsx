@@ -1,55 +1,36 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Switch, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Button,TextInput,RefreshControl } from 'react-native';//refresh control used to pull screen and refresh for new events
+import { View, Text, Switch, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, RefreshControl,TextInput,Modal } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons'; ///meken thamai icon eka da ganne profile button ekata
 
-const BACKEND_URL = 'http://172.20.10.5:8004/api'; // ඔයාගේ ලැප් එකේ IP එක දාන්න
+const BACKEND_URL = 'http://172.20.10.5:8004/api'; // ඔයාගේ ලැප් එකේ IP එක
 
 export default function VolunteerDashboard() {
   const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [district, setDistrict] = useState('');
+  const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
+  const [editDistrict, setEditDistrict] = useState('');
+  const [editCity, setEditCity] = useState('');
+  const [editSkills, setEditSkills] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const SRI_LANKAN_SKILLS = [
+  { value: 'first_aid', label: 'First Aid' },
+  { value: 'search_&_rescue', label: 'Search & Rescue' },
+  { value: 'debris_clearing', label: 'Debris Clearing' },
+  { value: 'food_distribution', label: 'Food Distribution' },
+  { value: 'medical_assistance', label: 'Medical Assistance' },
+  { value: 'driving_transport', label: 'Driving/Transport' },
+  { value: 'boat_operating', label: 'Boat Operating' },
+  { value: 'coordination', label: 'Coordination' },
+];
+
 
   useEffect(() => {
-   fetchDashboardData();
-   
-
-    let ws: WebSocket | null = null;
-    let isMounted = true; // Component එක live ද කියලා බලන්න
-
-    const connectWebSocket = async () => {
-      const token = await SecureStore.getItemAsync('access_token');
-      if (!token || !isMounted) return;
-
-      // 🚨 Gateway එක (8000) වෙනුවට කෙලින්ම RTO Go Service එකට (8080) කතා කරමු!
-      const WS_URL = `ws://172.20.10.5:8080/ws`; 
-      
-      // Token එක Sub-protocol එකක් විදිහට යවනවා
-      ws = new WebSocket(WS_URL, ['bearer', token]);
-
-      ws.onopen = () => console.log('✅ WebSocket ලයිව් සම්බන්ධ විය!');
-      
-      ws.onmessage = (event) => {
-        console.log('🔔 නව පණිවිඩයක් ආවා:', event.data);
-        fetchDashboardData();
-        Alert.alert('🚨 හදිසි ආපදාවක්!', 'ඔබට නව මෙහෙයුමක් ලැබී ඇත. කරුණාකර පරීක්ෂා කරන්න.');
-      };
-
-      // ඇයි කට් වෙන්නේ කියලා හරියටම බලාගන්න code එකයි reason එකයි print කරමු
-      ws.onclose = (e) => console.log(`❌ WebSocket විසන්ධි විය. Code: ${e.code}, Reason: ${e.reason}`);
-    };
-    connectWebSocket();
-
-    // Component එකෙන් අයින් වෙද්දී (Unmount) connection එක හරියටම වහනවා
-    return () => {
-      isMounted = false;
-      if (ws) {
-        ws.close();
-      }
-    };
+    fetchDashboardData();
   }, []);
 
   const getAuthHeader = async () => {
@@ -61,28 +42,40 @@ export default function VolunteerDashboard() {
     setIsLoading(true);
     try {
       const config = await getAuthHeader();
+      let currentProfile = null;
 
       // 1. Profile එකේ විස්තර ගන්නවා
       try {
         const profileRes = await axios.get(`${BACKEND_URL}/volunteer/profiles/me`, config);
-        setProfile(profileRes.data);
+        currentProfile = profileRes.data;
+        setProfile(currentProfile);
+
+        // 🚨 අලුත් Volunteer කෙනෙක් නම් Profile Modal එක ඕපන් කරනවා
+        if (!currentProfile.base_district) {
+          Alert.alert('සාදරයෙන් පිළිගනිමු!', 'මෙහෙයුම් ලබා ගැනීමට පෙර කරුණාකර ඔබගේ ගිණුමේ විස්තර සම්පූර්ණ කරන්න.');
+          setIsProfileModalVisible(true); // වෙන පේජ් එකකට යන්නෙ නෑ, Popup එක එනවා!
+          return;
+        }
+
       } catch (err: any) {
-        // අලුතින්ම රෙජිස්ටර් වුණාම RabbitMQ එකෙන් ප්‍රොෆයිල් එක හැදෙන්න තත්පරයක් දෙකක් යන්න පුළුවන් (404 Error එකක් එයි)
         if (err.response?.status === 404) {
           Alert.alert('Processing', 'ඔබේ ගිණුම සකසමින් පවතී. කරුණාකර ටිකකින් Refresh කරන්න.');
+          return;
         } else {
           throw err;
         }
       }
 
-      // 2. Assignments (මිෂන්ස්) ටික ගන්නවා
-      const assignmentsRes = await axios.get(`${BACKEND_URL}/volunteer/assignments`, config);
-      setAssignments(assignmentsRes.data);
+      // 2. Profile එක සම්පූර්ණ නම් විතරක් Assignments ටික ගන්නවා
+      if (currentProfile && currentProfile.base_district) {
+        const assignmentsRes = await axios.get(`${BACKEND_URL}/volunteer/assignments`, config);
+        setAssignments(assignmentsRes.data);
+      }
 
     } catch (error: any) {
       if (error.response?.status === 401) {
         Alert.alert('Session Expired', 'ඔබගේ සැසිය අවසන් වී ඇත. කරුණාකර නැවත Login වන්න.');
-        handleLogout(); // ඉබේම ලොග් අවුට් කරනවා
+        handleLogout();
       } else {
         console.error(error);
         Alert.alert('Error', 'දත්ත ලබාගැනීමේදී දෝෂයක් ඇතිවිය.');
@@ -92,32 +85,17 @@ export default function VolunteerDashboard() {
     }
   };
 
-  const updateProfile = async () => {
-    if (!district) {
-      Alert.alert('Error', 'කරුණාකර Base District එක ඇතුලත් කරන්න');
-      return;
-    }
-    try {
-      const config = await getAuthHeader();
-      await axios.put(
-        `${BACKEND_URL}/volunteer/profiles/me`,
-        {
-          base_district: district,
-          city: '', // දැනට හිස්ව යවමු
-          available_status: profile?.available_status || false,
-          skills: ["cleaning","plumbing","first_aid"] // දැනට default skills යවමු
-        },
-        config
-      );
-      Alert.alert('Success', 'Profile එක සාර්ථකව Update විය!');
-      fetchDashboardData(); // ආයේ දත්ත ටික අලුත් කරනවා
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'Profile update කිරීම අසාර්ථකයි.');
+  const toggleSkill = (skill: string) => {
+    if (editSkills.includes(skill)) {
+      // දැනටමත් තෝරලා නම් අයින් කරනවා (Deselect)
+      setEditSkills(editSkills.filter(s => s !== skill));
+    } else {
+      // අලුතින් තෝරනවා නම් ඇඩ් කරනවා
+      setEditSkills([...editSkills, skill]);
     }
   };
 
-  // Availability ෆන්ක්ෂන් එකේ Error Check එක 422 ට හැදුවා
+
   const toggleAvailability = async (value: boolean) => {
     try {
       const config = await getAuthHeader();
@@ -128,7 +106,6 @@ export default function VolunteerDashboard() {
       );
       setProfile({ ...profile, available_status: value });
     } catch (error: any) {
-      // මෙන්න මෙතන තමයි 422 අල්ලන්නේ!
       if (error.response?.status === 422) {
         Alert.alert('අවධානයයි!', 'Active වීමට පෙර ඔබගේ ප්‍රදේශය (Base District) තෝරා Save කරන්න.');
       } else {
@@ -137,16 +114,14 @@ export default function VolunteerDashboard() {
     }
   };
 
-  
- // Assignment ACCEPT function එක
+  // Assignment ACCEPT function
   const handleAccept = async (assignmentId: string) => {
     try {
       const config = await getAuthHeader();
       await axios.post(`${BACKEND_URL}/volunteer/assignments/${assignmentId}/accept`, {}, config);
       Alert.alert('Success', 'ඔබ මෙය assignment accept කර ඇත! 🚀');
-      fetchDashboardData(); // list ko refresh karne ke liye
+      fetchDashboardData(); 
     } catch (error: any) {
-      console.error(error);
       if (error.response?.status === 409) {
         Alert.alert('Too Late', 'කණගාටුයි, මෙම කාර්යය දැනටමත් වෙනත් ස්වේච්ඡා සේවකයෙකු විසින් භාරගෙන ඇත (සීමාව සම්පූර්ණයි)..');
       } else {
@@ -155,27 +130,80 @@ export default function VolunteerDashboard() {
     }
   };
 
-  // Assignment DECLINE function එක
+  // Assignment DECLINE function
   const handleDecline = async (assignmentId: string) => {
     try {
       const config = await getAuthHeader();
       await axios.post(`${BACKEND_URL}/volunteer/assignments/${assignmentId}/decline`, {}, config);
-      Alert.alert('Declined', 'you have declined the assignment.');
-      fetchDashboardData(); // refresh the list after declining
+      Alert.alert('Declined', 'You have declined the assignment.');
+      fetchDashboardData(); 
     } catch (error) {
-      console.error(error);
       Alert.alert('Error', 'Assignment decline problem got.');
     }
   };
 
+  // Assignment EN-ROUTE function
+  const handleEnRoute = async (assignmentId: string) => {
+    try {
+      const config = await getAuthHeader();
+      await axios.post(`${BACKEND_URL}/volunteer/assignments/${assignmentId}/en-route`, {}, config);
+      Alert.alert('On the way!', 'ඔබ ස්ථානයට ගමන් කරන බව යාවත්කාලීන විය. පරිස්සමින් යන්න! 🚶‍♂️');
+      fetchDashboardData(); 
+    } catch (error) {
+      Alert.alert('Error', 'Status යාවත්කාලීන කිරීම අසාර්ථකයි.');
+    }
+  };
 
-
+  // Assignment COMPLETE function
+  const handleComplete = async (assignmentId: string) => {
+    try {
+      const config = await getAuthHeader();
+      await axios.post(`${BACKEND_URL}/volunteer/assignments/${assignmentId}/complete`, {}, config);
+      Alert.alert('Mission Accomplished!', 'නියමයි! ඔබ සාර්ථකව මෙහෙයුම අවසන් කළා. ඔබට බොහොම ස්තූතියි! 🏆');
+      fetchDashboardData(); 
+    } catch (error) {
+      Alert.alert('Error', 'Status යාවත්කාලීන කිරීම අසාර්ථකයි.');
+    }
+  };
 
   const handleLogout = async () => {
     await SecureStore.deleteItemAsync('access_token');
     await SecureStore.deleteItemAsync('user_role');
     router.replace('/welcome');
   };
+
+  const saveProfile = async () => {
+    if (!editDistrict || !editCity || !editSkills) {
+      Alert.alert('අඩුපාඩුයි', 'කරුණාකර දිස්ත්‍රික්කය සහ නගරය ,skills ඇතුලත් කරන්න.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+
+      const config = await getAuthHeader();
+      await axios.put(
+        `${BACKEND_URL}/volunteer/profiles/me`,
+        {
+          base_district: editDistrict,
+          city: editCity,
+          available_status: profile?.available_status || false,
+          skills: editSkills ,
+        },
+        config
+      );
+      Alert.alert('Success', 'Profile එක සාර්ථකව Update විය!');
+      setIsProfileModalVisible(false); // Modal එක වහනවා
+      fetchDashboardData(); // Dashboard එක රිෆ්‍රෙෂ් කරනවා
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Profile update කිරීම අසාර්ථකයි.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  const VALID_SKILL_VALUES = SRI_LANKAN_SKILLS.map(s => s.value); // 8 skill values ටිකම
+
+
 
   if (isLoading) {
     return (
@@ -185,40 +213,6 @@ export default function VolunteerDashboard() {
       </View>
     );
   }
-  
-  // Assignment එක EN-ROUTE (ස්ථානයට යන ගමන්) කිරීම
-  const handleEnRoute = async (assignmentId: string) => {
-    try {
-      const config = await getAuthHeader();
-      await axios.post(`${BACKEND_URL}/volunteer/assignments/${assignmentId}/en-route`, {}, config);
-      Alert.alert('On the way!', 'ඔබ ස්ථානයට ගමන් කරන බව යාවත්කාලීන විය. පරිස්සමින් යන්න! 🚶‍♂️');
-      fetchDashboardData(); // List එක Refresh කරනවා
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'Status යාවත්කාලීන කිරීම අසාර්ථකයි.');
-    }
-  };
-
-  // Assignment එක COMPLETE (මෙහෙයුම අවසන්) කිරීම
-  const handleComplete = async (assignmentId: string) => {
-    try {
-      const config = await getAuthHeader();
-      await axios.post(`${BACKEND_URL}/volunteer/assignments/${assignmentId}/complete`, {}, config);
-      Alert.alert('Mission Accomplished!', 'නියමයි! ඔබ සාර්ථකව මෙහෙයුම අවසන් කළා. ඔබට බොහොම ස්තූතියි! 🏆');
-      fetchDashboardData(); // List එක Refresh කරනවා
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'Status යාවත්කාලීන කිරීම අසාර්ථකයි.');
-    }
-  };
-
-
-
-
-
-
-
-
 
   return (
     <View style={styles.container}>
@@ -228,23 +222,36 @@ export default function VolunteerDashboard() {
           <Text style={styles.greeting}>ආයුබෝවන්,</Text>
           <Text style={styles.name}>{profile?.full_name || 'Volunteer'}</Text>
         </View>
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-      </View>
-      {/* Profile Update Section */}
-      <View style={{ backgroundColor: 'white', padding: 15, borderRadius: 10, marginBottom: 20 }}>
-        <Text style={{ marginBottom: 5, fontWeight: 'bold' }}>ඔබගේ ප්‍රදේශය (Base District): {profile?.base_district || 'තාම සකසා නැත'}</Text>
-        <TextInput 
-          style={{ borderWidth: 1, borderColor: '#ccc', padding: 10, borderRadius: 5, marginBottom: 10 }}
-          placeholder="උදා: Colombo, Gampaha..."
-          value={district}
-          onChangeText={setDistrict}
-        />
-        <Button title="Save District" onPress={updateProfile} color="#33b5e5" />
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          
+          {/* අලුතින් දාපු Profile Icon Button එක */}
+          <TouchableOpacity 
+            style={{ marginRight: 15 }} 
+            
+
+            onPress={() => {
+            
+              setEditDistrict(profile?.base_district || '');
+              setEditCity(profile?.city || '');
+              setEditSkills(
+                (profile?.skills || []).filter((s: string) => VALID_SKILL_VALUES.includes(s))
+              );
+              setIsProfileModalVisible(true);
+            }}
+          >
+            <Ionicons name="person-circle" size={36} color="#33b5e5" />
+          </TouchableOpacity>
+
+          {/* කලින් තිබ්බ Logout Button එක */}
+          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+          
+        </View>
       </View>
 
-      {/* Status Card */}
+
+      {/* Status Card (Availability Switch) */}
       <View style={styles.statusCard}>
         <Text style={styles.statusText}>
           {profile?.available_status ? '🟢 ඔබ උදව් කිරීමට සූදානම් (Active)' : '🔴 ඔබ දැනට Offline (Inactive)'}
@@ -259,7 +266,7 @@ export default function VolunteerDashboard() {
       {/* Assignments List */}
       <Text style={styles.sectionTitle}>ඔබගේ නව මෙහෙයුම් (Assignments)</Text>
       {assignments.length === 0 ? (
-        <Text style={styles.noData}>ඔබට නව මෙහෙයුම් නොමැත.</Text>
+        <Text style={styles.noData}>ඔබට දැනට නව මෙහෙයුම් නොමැත.</Text>
       ) : (
         <FlatList
           data={assignments}
@@ -272,7 +279,6 @@ export default function VolunteerDashboard() {
               <Text style={styles.assignmentStatus}>Status: {item.status}</Text>
               <Text style={{ marginBottom: 10 }}>Mission ID: {item.event_id}</Text>
               
-              {/* 1. NOTIFIED (අලුතින්ම ආපු එකක් නම්) */}
               {item.status === 'NOTIFIED' && (
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
                   <TouchableOpacity 
@@ -291,7 +297,6 @@ export default function VolunteerDashboard() {
                 </View>
               )}
 
-              {/* 2. ACCEPTED (බාරගත්තට පස්සේ යන ගමන් කියලා දාන්න) */}
               {item.status === 'ACCEPTED' && (
                 <TouchableOpacity 
                   style={{ backgroundColor: '#33b5e5', padding: 12, borderRadius: 5, marginTop: 10, alignItems: 'center' }}
@@ -301,7 +306,6 @@ export default function VolunteerDashboard() {
                 </TouchableOpacity>
               )}
 
-              {/* 3. EN_ROUTE (ස්ථානයට ගියාට පස්සේ වැඩේ ඉවරයි කියලා දාන්න) */}
               {item.status === 'EN_ROUTE' && (
                 <TouchableOpacity 
                   style={{ backgroundColor: '#FF8800', padding: 12, borderRadius: 5, marginTop: 10, alignItems: 'center' }}
@@ -311,7 +315,6 @@ export default function VolunteerDashboard() {
                 </TouchableOpacity>
               )}
 
-              {/* 4. COMPLETED (වැඩේ ඉවර කරපු ඒවා) */}
               {item.status === 'COMPLETED' && (
                  <Text style={{ color: '#007E33', fontWeight: 'bold', marginTop: 10, textAlign: 'center', fontSize: 16 }}>
                    🏆 මෙහෙයුම සාර්ථකව අවසන් කර ඇත!
@@ -321,6 +324,57 @@ export default function VolunteerDashboard() {
           )}
         />
       )}
+
+
+
+      {/* Profile Modal / Popup Card */}
+      <Modal visible={isProfileModalVisible} animationType="fade" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>👤 මගේ ගිණුම</Text>
+            
+            <Text style={styles.label}>දිස්ත්‍රික්කය (District):</Text>
+            <TextInput style={styles.input} value={editDistrict} onChangeText={setEditDistrict} placeholder="උදා: Colombo" />
+
+            <Text style={styles.label}>නගරය (City):</Text>
+            <TextInput style={styles.input} value={editCity} onChangeText={setEditCity} placeholder="උදා: Moratuwa" />
+
+            
+            <Text style={styles.label}>ඔබේ හැකියාවන් (Select කරන්න):</Text>
+            <View style={styles.skillsContainer}>
+              {SRI_LANKAN_SKILLS.map((skill) => {
+                const isSelected = editSkills.includes(skill.value);
+                return (
+                  <TouchableOpacity
+                    key={skill.value}
+                    style={[styles.skillChip, isSelected && styles.skillChipSelected]}
+                    onPress={() => toggleSkill(skill.value)}
+                  >
+                    <Text style={[styles.skillText, isSelected && styles.skillTextSelected]}>
+                      {skill.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity style={styles.saveBtn} onPress={saveProfile} disabled={isSaving}>
+              <Text style={styles.saveBtnText}>{isSaving ? 'Saving...' : 'Save Details'}</Text>
+            </TouchableOpacity>
+
+            {/* දැනටමත් දිස්ත්‍රික්කයක් තියෙන කෙනෙක්ට විතරක් Modal එක වහන්න (Cancel) දෙන්න. අලුත් කෙනෙක් නම් අනිවාර්යයෙන් Save කරන්නම ඕනේ */}
+            {profile?.base_district && (
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setIsProfileModalVisible(false)}>
+                <Text style={styles.cancelBtnText}>Close</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+
+
+
     </View>
   );
 }
@@ -332,11 +386,26 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 16, color: '#666' },
   name: { fontSize: 24, fontWeight: 'bold', color: '#333' },
   logoutBtn: { padding: 8, backgroundColor: '#ff4444', borderRadius: 8 },
+  profileBtn:{padding: 8, backgroundColor: '#6c2dc5', borderRadius: 80},
   logoutText: { color: 'white', fontWeight: 'bold' },
   statusCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', padding: 20, borderRadius: 12, elevation: 3, marginBottom: 30 },
   statusText: { fontSize: 16, fontWeight: 'bold', flex: 1 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, color: '#333' },
   noData: { color: '#888', fontStyle: 'italic', textAlign: 'center', marginTop: 20 },
   assignmentCard: { backgroundColor: 'white', padding: 15, borderRadius: 10, marginBottom: 10, elevation: 2 },
-  assignmentStatus: { fontWeight: 'bold', color: '#00C851', marginBottom: 5 }
+  assignmentStatus: { fontWeight: 'bold', color: '#00C851', marginBottom: 5 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalCard: { width: '85%', backgroundColor: 'white', padding: 20, borderRadius: 15, elevation: 5 },
+  modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 15, textAlign: 'center', color: '#333' },
+  label: { fontSize: 14, fontWeight: 'bold', color: '#555', marginTop: 10, marginBottom: 5 },
+  input: { borderWidth: 1, borderColor: '#ddd', padding: 10, borderRadius: 8, fontSize: 16, backgroundColor: '#fafafa', marginBottom: 10 },
+  saveBtn: { backgroundColor: '#33b5e5', padding: 12, borderRadius: 8, alignItems: 'center', marginTop: 15 },
+  saveBtnText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+  cancelBtn: { marginTop: 15, alignItems: 'center' },
+  cancelBtnText: { color: '#ff4444', fontWeight: 'bold', fontSize: 16 },
+  skillsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 5, marginBottom: 15 },
+  skillChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#eee', borderWidth: 1, borderColor: '#ddd' },
+  skillChipSelected: { backgroundColor: '#33b5e5', borderColor: '#33b5e5' },
+  skillText: { color: '#555', fontSize: 13, fontWeight: 'bold' },
+  skillTextSelected: { color: 'white' },
 });
