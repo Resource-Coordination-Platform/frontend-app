@@ -23,12 +23,12 @@ export default function TabLayout() {
       />
       
       <Tabs.Screen
-        name="profile"
+        name="donate"
         options={{
-          title: 'Profile',
-          tabBarIcon: ({ color }) => <Ionicons name="person" size={24} color={color} />,
+          title: 'Donate',
+          tabBarIcon: ({ color }) => <Ionicons name="heart" size={24} color={color} />,
         }}
-/>
+      />
       <Tabs.Screen
         name="report_a_event"
         options={{
@@ -37,9 +37,6 @@ export default function TabLayout() {
         }}
       />
 
-
-
-
-    </Tabs>
+  </Tabs>
   );
 }
