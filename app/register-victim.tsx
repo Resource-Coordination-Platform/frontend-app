@@ -5,7 +5,7 @@ import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 
 // ඔයාගේ ලැප් එකේ IP Address එක මෙතනට දාන්න
-const BACKEND_URL = 'http://172.20.10.5:8001/api';
+const BACKEND_URL = 'http://10.77.157.42:8001/api';
 
 export default function RegisterHelper() {
   const router = useRouter();
