@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY =process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ;
 
-const BACKEND_URL = 'http://172.20.10.5:8004/api'; // ඔයාගේ ලැප් එකේ IP එක දාන්න
+const BACKEND_URL = 'http://10.77.157.42:8004/api';
 
 export default function ReportEventScreen() {
   const [isLoading, setIsLoading] = useState(false);

@@ -4,7 +4,7 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { WebView } from 'react-native-webview';
 
-const BACKEND_URL = 'http://172.20.10.5:8002/api'; // Logistics Service එකේ Port එක (8002)
+const BACKEND_URL = 'http://10.77.157.42:8002/api';
 
 export default function DonateScreen() {
   const [needs, setNeeds] = useState<any[]>([]);
