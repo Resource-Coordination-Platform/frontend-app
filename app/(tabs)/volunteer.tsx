@@ -5,7 +5,7 @@ import axios from 'axios';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons'; ///meken thamai icon eka da ganne profile button ekata
 
-const BACKEND_URL = 'http://172.20.10.5:8004/api'; // ඔයාගේ ලැප් එකේ IP එක
+const BACKEND_URL = 'http://10.77.157.42:8004/api';
 
 export default function VolunteerDashboard() {
   const router = useRouter();
