@@ -31,6 +31,7 @@ export default function CrisisMapScreen() {
 
       // අර අපි අලුතින් හදපු Endpoint එකට කතා කරනවා
       const res = await axios.get(`${BACKEND_URL}/volunteer/events/active-map`, config);
+      //console.log("Map Events:", JSON.stringify(res.data, null, 2)); // 👈 මේක දාලා බලන්න!
       setEvents(res.data);
     } catch (error) {
       console.error("Map Load Error:", error);
