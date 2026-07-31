@@ -36,6 +36,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <Ionicons name="megaphone" size={24} color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="live_crisis_map"
+        options={{
+          title: 'Map',
+          tabBarIcon: ({ color }) => <Ionicons name="map" size={24} color={color} />,
+        }}
+      />
 
   </Tabs>
   );
