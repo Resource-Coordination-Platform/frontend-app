@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
+import { jwtDecode } from "jwt-decode";
 
 
 const BACKEND_URL = 'http://10.77.157.42:8001/api';  
@@ -27,10 +28,21 @@ export default function LoginScreen() {
       });
 
       await SecureStore.setItemAsync('access_token', res.data.access_token);
-      // දැනට හැමෝම volunteer කියලා හිතමු (පස්සේ මේක හරියටම හදමු)
-      await SecureStore.setItemAsync('user_role', 'volunteer'); 
-
-      router.replace('/volunteer');
+      // Backend එකෙන් ආපු හැංගිලා තියෙන ඩේටා ටික එළියට ගන්නවා
+      const decodedToken = jwtDecode(res.data.access_token);
+    
+      console.log(decodedToken.roles);      // උදා: ['victim']
+      console.log(decodedToken.user_type);  // උදා: 'victim'
+      console.log(decodedToken.sub);    // User ගේ UUID එක
+      console.log(decodedToken.tenant_id);  // Tenant ගේ UUID එක
+      
+      if (decodedToken.user_type === 'VICTIM') {
+        await SecureStore.setItemAsync('user_role', 'VICTIM');
+        router.replace('/victim');
+      }else if (decodedToken.user_type === 'VOLUNTEER') {
+        await SecureStore.setItemAsync('user_role', 'VOLUNTEER'); 
+        router.replace('/volunteer'); ///methana yanne volunteer kiyana tabs folder ekata.eke index.tsx file 
+      }
     } catch (error: any) {
       console.error(error);
       Alert.alert('Login Failed', 'Email හෝ Password වැරදියි.');
@@ -39,16 +51,35 @@ export default function LoginScreen() {
     }
   };
 
-  return (
+ return (
     <View style={styles.container}>
       <Text style={styles.title}>Login</Text>
+      
       <TextInput 
-        style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none"
+        style={styles.input} 
+        placeholder="Email" 
+        value={email} 
+        onChangeText={setEmail} 
+        autoCapitalize="none"
+        keyboardType="email-address"
       />
+      
       <TextInput 
-        style={styles.input} placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry
+        style={styles.input} 
+        placeholder="Password" 
+        value={password} 
+        onChangeText={setPassword} 
+        secureTextEntry
       />
-      {isLoading ? <ActivityIndicator size="large" color="#33b5e5" /> : <Button title="Login" onPress={handleLogin} />}
+      
+      {isLoading ? (
+        <ActivityIndicator size="large" color="#007BFF" />
+      ) : (
+        // 🚨 FIX: Default Button එක වෙනුවට TouchableOpacity එකක් දැම්මා
+        <TouchableOpacity style={styles.button} onPress={handleLogin}>
+          <Text style={styles.buttonText}>Login</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
