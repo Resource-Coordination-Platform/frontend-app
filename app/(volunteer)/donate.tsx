@@ -4,7 +4,7 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { WebView } from 'react-native-webview';
 
-const BACKEND_URL = 'http://10.77.157.42:8002/api';
+const BACKEND_URL = 'http://172.22.192.42:8002/api';
 
 export default function DonateScreen() {
   const [needs, setNeeds] = useState<any[]>([]);

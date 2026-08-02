@@ -5,8 +5,8 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
 
-const VOLUNTEER_BACKEND_URL = 'http://10.77.157.42:8004/api';
-const IAM_BACKEND_URL = 'http://10.77.157.42:8001/api'; // IAM Service URL එක (Port 8001)
+const VOLUNTEER_BACKEND_URL = 'http://172.22.192.42:8004/api';
+const IAM_BACKEND_URL = 'http://172.22.192.42:8001/api'; // IAM Service URL එක (Port 8001)
 
 export default function CrisisMapScreen() {
   const [events, setEvents] = useState<any[]>([]);
