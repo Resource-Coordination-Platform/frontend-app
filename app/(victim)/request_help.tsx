@@ -7,7 +7,7 @@ import * as Location from 'expo-location'; //for location
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
-const BACKEND_URL = 'http://10.77.157.42:8004/api';
+const BACKEND_URL = 'http://172.22.192.42:8004/api';
 
 export default function RequestHelpScreen() {
   const [disasterType, setDisasterType] = useState<string | null>(null);
