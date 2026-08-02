@@ -6,7 +6,7 @@ import axios from 'axios';
 import { jwtDecode } from "jwt-decode";
 
 
-const BACKEND_URL = 'http://10.77.157.42:8001/api';  
+const BACKEND_URL = 'http://172.22.192.42:8001/api';  
 
 export default function LoginScreen() {
   const router = useRouter();

@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 
-const BACKEND_URL = 'http://10.77.157.42:8001/api';   
+const BACKEND_URL = 'http://172.22.192.42:8001/api';   
 
 export default function RegisterHelper() {
   const router = useRouter();
