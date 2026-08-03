@@ -34,7 +34,7 @@ export default function VictimHomeScreen() {
   const fetchMyRequests = async () => {
     try {
       const token = await SecureStore.getItemAsync('access_token');
-      const res = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/requests/vmy-requests`, {
+      const res = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/requests/my-requests`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
