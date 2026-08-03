@@ -7,7 +7,6 @@ import * as Location from 'expo-location'; //for location
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
-const BACKEND_URL = 'http://172.22.192.42:8004/api';
 
 export default function RequestHelpScreen() {
   const [disasterType, setDisasterType] = useState<string | null>(null);
@@ -148,7 +147,7 @@ export default function RequestHelpScreen() {
           longitude: req.longitude || null
         };
 
-        return axios.post(`${BACKEND_URL}/volunteer/requests`, payload, {
+        return axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/requests`, payload, {
           headers: {
             Authorization: `Bearer ${token}` // Token එක යවනවා
           }

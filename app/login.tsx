@@ -6,7 +6,6 @@ import axios from 'axios';
 import { jwtDecode } from "jwt-decode";
 import { MaterialIcons } from '@expo/vector-icons';
 
-const BACKEND_URL = 'http://172.22.192.42:8001/api';  
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -21,7 +20,7 @@ export default function LoginScreen() {
     }
     setIsLoading(true);
     try {
-      const res = await axios.post(`${BACKEND_URL}/auth/login`, {
+      const res = await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/auth/login`, {
         email: email,
         password: password
       });

@@ -10,7 +10,6 @@ import { Ionicons } from '@expo/vector-icons';
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY =process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ;
 
-const BACKEND_URL = 'http://172.22.192.42:8004/api';
 
 export default function ReportEventScreen() {
   const [isLoading, setIsLoading] = useState(false);
@@ -97,7 +96,7 @@ export default function ReportEventScreen() {
         image_url: uploadedImageUrl // අප්ලෝඩ් කරපු ලින්ක් එක යවනවා
       };
 
-      await axios.post(`${BACKEND_URL}/volunteer/reports`, payload, config);
+      await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/reports`, payload, config);
       
       Alert.alert('Success!', 'ඔබේ වාර්තාව සාර්ථකව යොමු කළා. කණ්ඩායම මෙය ඉක්මනින් පරීක්ෂා කරාවි! 🏆');
       

@@ -5,7 +5,6 @@ import axios from 'axios';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons'; ///meken thamai icon eka da ganne profile button ekata
 
-const BACKEND_URL = 'http://172.22.192.42:8004/api';
 
 export default function VolunteerDashboard() {
   const router = useRouter();
@@ -46,7 +45,7 @@ export default function VolunteerDashboard() {
 
       // 1. Profile එකේ විස්තර ගන්නවා
       try {
-        const profileRes = await axios.get(`${BACKEND_URL}/volunteer/profiles/me`, config);
+        const profileRes = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/profiles/me`, config);
         currentProfile = profileRes.data;
         setProfile(currentProfile);
 
@@ -68,7 +67,7 @@ export default function VolunteerDashboard() {
 
       // 2. Profile එක සම්පූර්ණ නම් විතරක් Assignments ටික ගන්නවා
       if (currentProfile && currentProfile.base_district) {
-        const assignmentsRes = await axios.get(`${BACKEND_URL}/volunteer/assignments`, config);
+        const assignmentsRes = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/assignments`, config);
         setAssignments(assignmentsRes.data);
       }
 
@@ -100,7 +99,7 @@ export default function VolunteerDashboard() {
     try {
       const config = await getAuthHeader();
       await axios.patch(
-        `${BACKEND_URL}/volunteer/profiles/me/availability`,
+        `${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/profiles/me/availability`,
         { available_status: value },
         config
       );
@@ -118,7 +117,7 @@ export default function VolunteerDashboard() {
   const handleAccept = async (assignmentId: string) => {
     try {
       const config = await getAuthHeader();
-      await axios.post(`${BACKEND_URL}/volunteer/assignments/${assignmentId}/accept`, {}, config);
+      await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/assignments/${assignmentId}/accept`, {}, config);
       Alert.alert('Success', 'ඔබ මෙය assignment accept කර ඇත! 🚀');
       fetchDashboardData(); 
     } catch (error: any) {
@@ -134,7 +133,7 @@ export default function VolunteerDashboard() {
   const handleDecline = async (assignmentId: string) => {
     try {
       const config = await getAuthHeader();
-      await axios.post(`${BACKEND_URL}/volunteer/assignments/${assignmentId}/decline`, {}, config);
+      await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/assignments/${assignmentId}/decline`, {}, config);
       Alert.alert('Declined', 'You have declined the assignment.');
       fetchDashboardData(); 
     } catch (error) {
@@ -146,7 +145,7 @@ export default function VolunteerDashboard() {
   const handleEnRoute = async (assignmentId: string) => {
     try {
       const config = await getAuthHeader();
-      await axios.post(`${BACKEND_URL}/volunteer/assignments/${assignmentId}/en-route`, {}, config);
+      await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/assignments/${assignmentId}/en-route`, {}, config);
       Alert.alert('On the way!', 'ඔබ ස්ථානයට ගමන් කරන බව යාවත්කාලීන විය. පරිස්සමින් යන්න! 🚶‍♂️');
       fetchDashboardData(); 
     } catch (error) {
@@ -158,7 +157,7 @@ export default function VolunteerDashboard() {
   const handleComplete = async (assignmentId: string) => {
     try {
       const config = await getAuthHeader();
-      await axios.post(`${BACKEND_URL}/volunteer/assignments/${assignmentId}/complete`, {}, config);
+      await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/assignments/${assignmentId}/complete`, {}, config);
       Alert.alert('Mission Accomplished!', 'නියමයි! ඔබ සාර්ථකව මෙහෙයුම අවසන් කළා. ඔබට බොහොම ස්තූතියි! 🏆');
       fetchDashboardData(); 
     } catch (error) {
@@ -182,7 +181,7 @@ export default function VolunteerDashboard() {
 
       const config = await getAuthHeader();
       await axios.put(
-        `${BACKEND_URL}/volunteer/profiles/me`,
+        `${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/profiles/me`,
         {
           base_district: editDistrict,
           city: editCity,

@@ -5,8 +5,6 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
 
-const VOLUNTEER_BACKEND_URL = 'http://172.22.192.42:8004/api';
-const IAM_BACKEND_URL = 'http://172.22.192.42:8001/api'; // IAM Service URL එක (Port 8001)
 
 export default function CrisisMapScreen() {
   const [events, setEvents] = useState<any[]>([]);
@@ -32,12 +30,12 @@ export default function CrisisMapScreen() {
       const config = { headers: { Authorization: `Bearer ${token}` } };
 
       // 1. Events ටික ගන්නවා (Red Pins)
-      const eventsRes = await axios.get(`${VOLUNTEER_BACKEND_URL}/volunteer/events/active-map`, config);
+      const eventsRes = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/events/active-map`, config);
       setEvents(eventsRes.data);
 
 
       // 2. Tenants ලගේ Locations ටික ගන්නවා (Blue Pins)
-      const tenantsRes = await axios.get(`${IAM_BACKEND_URL}/auth/tenants/locations`, config);
+      const tenantsRes = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/auth/tenants/locations`, config);
       setTenants(tenantsRes.data);
 
     } catch (error) {

@@ -11,7 +11,6 @@ export default function VictimHomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const router = useRouter();
 
-  const BACKEND_URL = 'http://172.22.192.42:8004/api/volunteer/requests'; 
 
   const handleLogout = async () => {
     Alert.alert(
@@ -35,7 +34,7 @@ export default function VictimHomeScreen() {
   const fetchMyRequests = async () => {
     try {
       const token = await SecureStore.getItemAsync('access_token');
-      const res = await axios.get(`${BACKEND_URL}/my-requests`, {
+      const res = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/requests/vmy-requests`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       

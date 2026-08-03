@@ -9,16 +9,15 @@ export default function AlertsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // 🚨 ඔයාගේ Backend IP එක
-  const BACKEND_URL = 'http://172.22.192.42:8002/api'; 
+  
   const fetchAlerts = async () => {
     try {
       const token = await SecureStore.getItemAsync('access_token');
       
       console.log("Token එක තියෙනවද?:", token ? "ඔව්" : "නැත");
-      console.log("යන URL එක:", `${BACKEND_URL}/alerts`);
+      console.log("යන URL එක:", `${process.env.EXPO_PUBLIC_BACKEND_URL}/alerts`);
 
-      const res = await axios.get(`${BACKEND_URL}/alerts`, {
+      const res = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/alerts`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       

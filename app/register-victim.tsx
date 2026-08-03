@@ -6,7 +6,6 @@ import * as Location from 'expo-location';
 import axios from 'axios';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 
-const BACKEND_URL = 'http://172.22.192.42:8001/api'; 
 
 export default function RegisterVictim() {
   const router = useRouter();
@@ -37,11 +36,11 @@ export default function RegisterVictim() {
       const lat = location.coords.latitude;
       const lng = location.coords.longitude;
 
-      await axios.post(`${BACKEND_URL}/auth/register`, {
+      await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/auth/register`, {
         email: email, password: password, full_name: fullName, phone: phone, user_type: 'VICTIM', latitude: lat, longitude: lng
       });
 
-      const loginResponse = await axios.post(`${BACKEND_URL}/auth/login`, { email: email, password: password });
+      const loginResponse = await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/auth/login`, { email: email, password: password });
       const accessToken = loginResponse.data.access_token;
       const tenantId = loginResponse.data.tenant_id; 
 

@@ -10,8 +10,7 @@ export default function SafeMapScreen() {
   const [safeZones, setSafeZones] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 🚨 ඔයාගේ Backend IP එක
-  const BACKEND_URL = 'http://10.77.157.42:8001/api';
+
 
   useEffect(() => {
     (async () => {
@@ -35,7 +34,7 @@ export default function SafeMapScreen() {
         // 2. Backend එකෙන් ආරක්ෂිත ස්ථාන (Tenants/Camps) ටික ගන්නවා
         // (මේ Endpoint එක අපි ඉස්සරහට හදමු, දැනට බොරු ඩේටා ටිකක් දාමු වැඩ කරනවද බලන්න)
         /* 
-        const res = await axios.get(`${BACKEND_URL}/safe-zones`);
+        const res = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/safe-zones`);
         setSafeZones(res.data);
         */
 

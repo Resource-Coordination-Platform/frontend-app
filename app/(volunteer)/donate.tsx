@@ -4,7 +4,7 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { WebView } from 'react-native-webview';
 
-const BACKEND_URL = 'http://172.22.192.42:8002/api';
+
 
 export default function DonateScreen() {
   const [needs, setNeeds] = useState<any[]>([]);
@@ -29,7 +29,7 @@ export default function DonateScreen() {
     setIsLoading(true);
     try {
       const config = await getAuthHeader();
-      const res = await axios.get(`${BACKEND_URL}/inventory/needs`, config);
+      const res = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/inventory/needs`, config);
       setNeeds(res.data);
     } catch (error) {
       console.error(error);
@@ -64,7 +64,7 @@ export default function DonateScreen() {
       };
 
       // Backend එකෙන් Hash එකයි Order ID එකයි ඉල්ලගන්නවා
-      const res = await axios.post(`${BACKEND_URL}/payments/checkout`, payload, config);
+      const res = await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/payments/checkout`, payload, config);
       const payData = res.data;
 
       // WebView එක ඇතුළේ ලෝඩ් වෙන්න ඕනේ HTML Form එක හදනවා

@@ -3,7 +3,7 @@ import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, 
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
-const BACKEND_URL = 'http://172.22.192.42:8004/api';   
+
 export default function EventsFeed() {
   const [events, setEvents] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -20,10 +20,10 @@ export default function EventsFeed() {
   const fetchEvents = async () => {
     setIsLoading(true);
     try {
-      console.log("මම මේ ලින්ක් එකට තමයි යන්නේ: ", `${BACKEND_URL}/volunteer/events`); // ලින්ක් එක හරිද බලමු
+      console.log("මම මේ ලින්ක් එකට තමයි යන්නේ: ", `${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/events`); // ලින්ක් එක හරිද බලමු
       
       const config = await getAuthHeader();
-      const response = await axios.get(`${BACKEND_URL}/volunteer/events`, config);
+      const response = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/events`, config);
       setEvents(response.data);
     } catch (error: any) {
       // මෙන්න මෙහෙමයි Error එකක් හරියටම පෝස්ට්මෝටම් කරන්නේ:
