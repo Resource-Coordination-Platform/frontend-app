@@ -5,10 +5,12 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
 
-const BACKEND_URL = 'http://10.77.157.42:8004/api';
+const VOLUNTEER_BACKEND_URL = 'http://172.22.192.42:8004/api';
+const IAM_BACKEND_URL = 'http://172.22.192.42:8001/api'; // IAM Service URL එක (Port 8001)
 
 export default function CrisisMapScreen() {
   const [events, setEvents] = useState<any[]>([]);
+  const [tenants, setTenants] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // ලංකාව මැදට වෙන්න Default Region එකක්
@@ -29,10 +31,15 @@ export default function CrisisMapScreen() {
       const token = await SecureStore.getItemAsync('access_token');
       const config = { headers: { Authorization: `Bearer ${token}` } };
 
-      // අර අපි අලුතින් හදපු Endpoint එකට කතා කරනවා
-      const res = await axios.get(`${BACKEND_URL}/volunteer/events/active-map`, config);
-      //console.log("Map Events:", JSON.stringify(res.data, null, 2)); // 👈 මේක දාලා බලන්න!
-      setEvents(res.data);
+      // 1. Events ටික ගන්නවා (Red Pins)
+      const eventsRes = await axios.get(`${VOLUNTEER_BACKEND_URL}/volunteer/events/active-map`, config);
+      setEvents(eventsRes.data);
+
+
+      // 2. Tenants ලගේ Locations ටික ගන්නවා (Blue Pins)
+      const tenantsRes = await axios.get(`${IAM_BACKEND_URL}/auth/tenants/locations`, config);
+      setTenants(tenantsRes.data);
+
     } catch (error) {
       console.error("Map Load Error:", error);
       Alert.alert("Error", "ආපදා තොරතුරු සිතියමට ලබාගැනීමට නොහැකි විය.");
@@ -51,17 +58,16 @@ export default function CrisisMapScreen() {
       ) : (
         <MapView style={styles.map} initialRegion={initialRegion}>
           
-          {/* Backend එකෙන් එන Events ටික Loop කරලා Markers දානවා */}
+          {/* 🔴 1. Disaster Events (Red Pins) */}
           {events.map((event) => (
             <Marker
-              key={event.id}
+              key={`event-${event.id}`}
               coordinate={{
-                latitude: event.latitude,
-                longitude: event.longitude,
+                latitude: Number(event.latitude),
+                longitude: Number(event.longitude),
               }}
               pinColor="red"
             >
-              {/* Pin එක එබුවම පේන විස්තර බබල් එක (Callout) */}
               <Callout style={styles.callout}>
                 <View style={styles.calloutContainer}>
                   <Text style={styles.eventTitle}>🚨 {event.title}</Text>
@@ -69,13 +75,28 @@ export default function CrisisMapScreen() {
                   <Text style={styles.eventDesc} numberOfLines={2}>
                     {event.description || "විස්තරයක් නැත."}
                   </Text>
-                  
-                  {/* අවශ්‍ය Skills මොනවද කියලත් පෙන්නමු */}
-                  {event.requirements && event.requirements.length > 0 && (
-                    <Text style={styles.reqText}>
-                      අවශ්‍යතාවය: {event.requirements.map((r: any) => `${r.skill} (${r.required_count})`).join(', ')}
-                    </Text>
-                  )}
+                </View>
+              </Callout>
+            </Marker>
+          ))}
+
+          {/* 🔵 2. Tenant Organizations / Relief Centers (Blue Pins) */}
+          {tenants.map((tenant) => (
+            <Marker
+              key={`tenant-${tenant.id}`}
+              coordinate={{
+                latitude: Number(tenant.latitude),
+                longitude: Number(tenant.longitude),
+              }}
+              pinColor="blue" // නිල් පාටින් පෙන්වනවා
+            >
+              <Callout style={styles.callout}>
+                <View style={styles.calloutContainer}>
+                  <Text style={styles.tenantTitle}>🏢 {tenant.name}</Text>
+                  <Text style={styles.tenantBadge}>සහන මධ්‍යස්ථානය / සංවිධානය</Text>
+                  <Text style={styles.eventDesc} numberOfLines={3}>
+                    {tenant.description || "විස්තර ලබා දී නොමැත."}
+                  </Text>
                 </View>
               </Callout>
             </Marker>
@@ -94,7 +115,8 @@ const styles = StyleSheet.create({
   callout: { width: 220 },
   calloutContainer: { padding: 5 },
   eventTitle: { fontWeight: 'bold', fontSize: 14, color: '#CC0000', marginBottom: 3 },
+  tenantTitle: { fontWeight: 'bold', fontSize: 14, color: '#0066CC', marginBottom: 3 },
+  tenantBadge: { fontSize: 11, fontWeight: 'bold', color: '#008000', marginBottom: 4 },
   eventDistrict: { fontSize: 12, fontWeight: '600', color: '#333', marginBottom: 3 },
-  eventDesc: { fontSize: 11, color: '#555', marginBottom: 5 },
-  reqText: { fontSize: 11, fontWeight: 'bold', color: '#007E33' }
+  eventDesc: { fontSize: 11, color: '#555' }
 });
