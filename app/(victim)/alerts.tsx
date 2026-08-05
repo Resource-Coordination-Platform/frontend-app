@@ -9,45 +9,86 @@ export default function AlertsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  
+  // 🚨 ඔයාගේ IP එක මෙතනට දෙන්න
+  const IP_ADDRESS = '10.217.241.42'; // <--- මෙතන ඔයාගේ Wi-Fi IP එක දාන්න
+
+  // REST API URL (Logistics Service - Port 8000) - පරණ ඒවා ගන්න
+  const REST_BACKEND_URL = `http://${IP_ADDRESS}:8000/api`;
+  // WebSocket URL (RTO Service - Port 8080) - අලුත් ඒවා Live ගන්න
+  const WS_URL = `ws://${IP_ADDRESS}:8000/ws`;
+
+  // 1. Initial Load එකට සහ Pull-to-refresh එකට අදාළ Function එක
   const fetchAlerts = async () => {
     try {
       const token = await SecureStore.getItemAsync('access_token');
-      
-      console.log("Token එක තියෙනවද?:", token ? "ඔව්" : "නැත");
-      console.log("යන URL එක:", `${process.env.EXPO_PUBLIC_BACKEND_URL}/alerts`);
+      if (!token) return;
 
-      const res = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/alerts`, {
+      const res = await axios.get(`${REST_BACKEND_URL}/alerts`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      console.log("✅ සාර්ථකව Data ආවා:", res.data);
       setAlerts(res.data);
-
     } catch (error: any) {
-      // 🚨 මෙන්න සුපිරිම Debugging කෑල්ල 🚨
-      console.log("❌ API Error එකක් ආවා!");
-      
-      if (error.response) {
-        // Backend එකට ගියා, හැබැයි Backend එකෙන් Error එකක් එව්වා (උදා: 401, 500)
-        console.error("Backend Status:", error.response.status);
-        console.error("Backend Error Data:", error.response.data);
-      } else if (error.request) {
-        // Backend එකට ගියේම නෑ! (Network අවුලක්, Timeout එකක් හෝ Firewall එකෙන් Block කරලා)
-        console.error("Network Error: Backend එකෙන් කිසිම Response එකක් ආවේ නෑ!");
-        console.error("Request Details:", error.message);
-        alert("Network Error: Port 8002 ට කනෙක්ට් වෙන්න බෑ. Windows Firewall එක Off කරලා බලන්න.");
-      } else {
-        // Request එක හදද්දිම මොකක් හරි අවුලක් ගිහින්
-        console.error("General Error:", error.message);
-      }
+      console.error("Failed to fetch alerts:", error.message);
     } finally {
       setIsLoading(false);
       setRefreshing(false);
     }
   };
+
+  // 2. Component එක Load වෙද්දී වැඩ කරන ප්‍රධාන තැන (REST + WebSocket)
   useEffect(() => {
+    // මුලින්ම පරණ ඩේටා ටික API එකෙන් අරන් පෙන්නනවා
     fetchAlerts();
+
+    let ws: WebSocket | null = null;
+
+    // Live Connection එක හදන Function එක
+    const connectWebSocket = async () => {
+      const token = await SecureStore.getItemAsync('access_token');
+      if (!token) return;
+
+      // Token එක යවලා RTO (Real-Time Operations) සර්විස් එකට කනෙක්ට් වෙනවා
+      ws = new WebSocket(WS_URL, null, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      ws.onopen = () => {
+        console.log("✅ WebSocket Connected Successfully!");
+      };
+
+      // අලුත් Alert එකක් ආපු ගමන් මේක Trigger වෙනවා!
+      ws.onmessage = (event) => {
+        try {
+          const newAlert = JSON.parse(event.data);
+          console.log("🚨 අලුත් Live Alert එකක් ආවා:", newAlert);
+          
+          // ආපු අලුත් Alert එක පරණ ලිස්ට් එකේ උඩින්ම (Top) එකතු කරනවා
+          setAlerts((prevAlerts) => [newAlert, ...prevAlerts]);
+          
+        } catch (e) {
+          console.error("WebSocket Message Parsing Error:", e);
+        }
+      };
+
+      ws.onerror = (e: any) => {
+        console.error("❌ WebSocket Error:", e);
+      };
+
+      ws.onclose = (e) => {
+        console.log("⚠️ WebSocket Connection Closed.");
+        console.log(e.code, e.reason);
+      };
+    };
+
+    connectWebSocket();
+
+    // 3. User මේ ස්ක්‍රීන් එකෙන් යද්දී (Unmount) Connection එක වහලා දානවා
+    return () => {
+      if (ws) {
+        ws.close();
+      }
+    };
   }, []);
 
   const onRefresh = () => {
@@ -55,7 +96,7 @@ export default function AlertsScreen() {
     fetchAlerts();
   };
 
-  // අනතුරේ බරපතලකම (Severity) අනුව පාට සහ අයිකන් මාරු කරන Function එක
+  // අනතුරේ බරපතලකම අනුව Style කරන Function එක
   const getSeverityStyle = (severity: string) => {
     switch (severity) {
       case 'HIGH':
@@ -104,7 +145,7 @@ export default function AlertsScreen() {
       ) : (
         <FlatList
           data={alerts}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
           contentContainerStyle={{ padding: 15 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#E53935']} />}
@@ -117,21 +158,12 @@ export default function AlertsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9f9f9' },
   header: { padding: 15, backgroundColor: '#020202', marginBottom: 10 },
-  title: { fontSize: 24, fontWeight: 'bold', color: 'white' },
   subtitle: { fontSize: 13, color: '#ffebee', marginTop: 5 },
-  
-  alertCard: {
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 15,
-    borderWidth: 1.5,
-    elevation: 2,
-  },
+  alertCard: { padding: 15, borderRadius: 12, marginBottom: 15, borderWidth: 1.5, elevation: 2 },
   alertHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   alertTitle: { fontSize: 16, fontWeight: 'bold', flex: 1 },
   alertMessage: { fontSize: 14, color: '#333', lineHeight: 20, marginBottom: 10 },
   dateText: { fontSize: 11, color: '#666', textAlign: 'right' },
-
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 },
   emptyText: { marginTop: 15, fontSize: 15, color: '#999' }
 });
