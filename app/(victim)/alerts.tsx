@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, AppState } from 'react-native';
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
@@ -8,25 +8,20 @@ export default function AlertsScreen() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const isMountedRef = useRef(true);
 
-  // 🚨 ඔයාගේ IP එක මෙතනට දෙන්න
-  const IP_ADDRESS = '10.217.241.42'; // <--- මෙතන ඔයාගේ Wi-Fi IP එක දාන්න
-
-  // REST API URL (Logistics Service - Port 8000) - පරණ ඒවා ගන්න
+  const IP_ADDRESS = '172.20.10.5';
   const REST_BACKEND_URL = `http://${IP_ADDRESS}:8000/api`;
-  // WebSocket URL (RTO Service - Port 8080) - අලුත් ඒවා Live ගන්න
   const WS_URL = `ws://${IP_ADDRESS}:8000/ws`;
 
-  // 1. Initial Load එකට සහ Pull-to-refresh එකට අදාළ Function එක
   const fetchAlerts = async () => {
     try {
       const token = await SecureStore.getItemAsync('access_token');
       if (!token) return;
-
       const res = await axios.get(`${REST_BACKEND_URL}/alerts`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
       setAlerts(res.data);
     } catch (error: any) {
       console.error("Failed to fetch alerts:", error.message);
@@ -36,67 +31,94 @@ export default function AlertsScreen() {
     }
   };
 
-  // 2. Component එක Load වෙද්දී වැඩ කරන ප්‍රධාන තැන (REST + WebSocket)
-  useEffect(() => {
-    // මුලින්ම පරණ ඩේටා ටික API එකෙන් අරන් පෙන්නනවා
-    fetchAlerts();
+  const connectWebSocket = async () => {
+    // Already connected නම් skip
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      console.log("✅ WS already connected, skipping");
+      return;
+    }
 
-    let ws: WebSocket | null = null;
+    const token = await SecureStore.getItemAsync('access_token');
+    if (!token || !isMountedRef.current) return;
 
-    // Live Connection එක හදන Function එක
-    const connectWebSocket = async () => {
-      const token = await SecureStore.getItemAsync('access_token');
-      if (!token) return;
+    const ws = new WebSocket(WS_URL, ['bearer', token]);
+    wsRef.current = ws;
 
-      // Token එක යවලා RTO (Real-Time Operations) සර්විස් එකට කනෙක්ට් වෙනවා
-      ws = new WebSocket(WS_URL, null, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      ws.onopen = () => {
-        console.log("✅ WebSocket Connected Successfully!");
-      };
-
-      // අලුත් Alert එකක් ආපු ගමන් මේක Trigger වෙනවා!
-      ws.onmessage = (event) => {
-        try {
-          const newAlert = JSON.parse(event.data);
-          console.log("🚨 අලුත් Live Alert එකක් ආවා:", newAlert);
-          
-          // ආපු අලුත් Alert එක පරණ ලිස්ට් එකේ උඩින්ම (Top) එකතු කරනවා
-          setAlerts((prevAlerts) => [newAlert, ...prevAlerts]);
-          
-        } catch (e) {
-          console.error("WebSocket Message Parsing Error:", e);
-        }
-      };
-
-      ws.onerror = (e: any) => {
-        console.error("❌ WebSocket Error:", e);
-      };
-
-      ws.onclose = (e) => {
-        console.log("⚠️ WebSocket Connection Closed.");
-        console.log(e.code, e.reason);
-      };
+    ws.onopen = () => {
+      console.log("✅ WebSocket Connected Successfully!");
     };
 
+   ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.type === 'alert') {
+        setAlerts((prev) => {
+          // duplicate නම් skip කරනවා
+          if (prev.some((a) => String(a.id) === String(data.id))) return prev;
+          return [data, ...prev];
+        });
+      }
+    } catch (e) {
+      console.error("WebSocket Message Parsing Error:", e);
+    }
+  };
+
+
+    ws.onerror = (e: any) => {
+      console.error("❌ WebSocket Error");
+    };
+
+    ws.onclose = (e) => {
+      console.log("⚠️ WS Closed:", e.code, e.reason);
+      wsRef.current = null;
+      
+      // Component mounted නම් auto-reconnect 3s පසුව
+      if (isMountedRef.current) {
+        console.log("🔄 Auto-reconnecting in 3s...");
+        setTimeout(() => {
+          if (isMountedRef.current) {
+            connectWebSocket();
+          }
+        }, 3000);
+      }
+    };
+  };
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    fetchAlerts();
     connectWebSocket();
 
-    // 3. User මේ ස්ක්‍රීන් එකෙන් යද්දී (Unmount) Connection එක වහලා දානවා
+    // App background/foreground detect — foreground එන ගමන් reconnect
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && isMountedRef.current) {
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+          console.log("📱 App came to foreground, reconnecting WS...");
+          connectWebSocket();
+        }
+      }
+    });
+
     return () => {
-      if (ws) {
-        ws.close();
+      isMountedRef.current = false;
+      subscription.remove();
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
       }
     };
   }, []);
+
+  // ... rest of your code (onRefresh, getSeverityStyle, renderItem, return, styles) same as before
+
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchAlerts();
   };
 
-  // අනතුරේ බරපතලකම අනුව Style කරන Function එක
+
+  // style acording to severity of the alert (HIGH, MEDIUM, LOW)
   const getSeverityStyle = (severity: string) => {
     switch (severity) {
       case 'HIGH':
