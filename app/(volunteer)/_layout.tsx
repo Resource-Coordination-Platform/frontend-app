@@ -5,7 +5,7 @@ export default function TabLayout() {
   return (
     <Tabs screenOptions={{ 
       tabBarActiveTintColor: '#33b5e5',
-      headerShown: false // අපි හැම Screen එකකම වෙනම Header එකක් හදලා තියෙන නිසා මේක false කරමු
+      headerShown: false // we gave every screen separate headers.so no need headershown 
     }}>
       <Tabs.Screen
         name="volunteer"

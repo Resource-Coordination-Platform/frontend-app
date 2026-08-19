@@ -78,7 +78,7 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F3F4F6', // ලා අළු පාට පසුබිමක්
+    backgroundColor: '#F3F4F6', 
   },
   container: {
     flex: 1,

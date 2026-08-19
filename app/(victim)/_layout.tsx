@@ -5,9 +5,9 @@ export default function VictimTabLayout() {
   return (
     <Tabs 
       screenOptions={{
-        tabBarActiveTintColor: '#E53935', // රතු පාට Theme එක
+        tabBarActiveTintColor: '#E53935', // red theme
         tabBarInactiveTintColor: '#757575',
-        headerShown: true, // උඩින් Title Bar එක පෙන්වන්න
+        headerShown: true, // for showing the header in each tab
         headerStyle: { backgroundColor: '#E53935' },
         headerTintColor: '#fff',
         tabBarStyle: { paddingBottom: 5, height: 60 }

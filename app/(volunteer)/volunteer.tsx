@@ -3,7 +3,7 @@ import { View, Text, Switch, FlatList, StyleSheet, ActivityIndicator, TouchableO
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons'; ///meken thamai icon eka da ganne profile button ekata
+import { Ionicons } from '@expo/vector-icons'; ///this is the library that give amaizing icons XD:)
 
 
 export default function VolunteerDashboard() {
@@ -43,16 +43,16 @@ export default function VolunteerDashboard() {
       const config = await getAuthHeader();
       let currentProfile = null;
 
-      // 1. Profile එකේ විස්තර ගන්නවා
+      // 1. get details from calling backend /volunteer/profiles/me endpoint
       try {
         const profileRes = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/profiles/me`, config);
         currentProfile = profileRes.data;
         setProfile(currentProfile);
 
-        // 🚨 අලුත් Volunteer කෙනෙක් නම් Profile Modal එක ඕපන් කරනවා
+        // 🚨 open profile model if a new user
         if (!currentProfile.base_district) {
           Alert.alert('සාදරයෙන් පිළිගනිමු!', 'මෙහෙයුම් ලබා ගැනීමට පෙර කරුණාකර ඔබගේ ගිණුමේ විස්තර සම්පූර්ණ කරන්න.');
-          setIsProfileModalVisible(true); // වෙන පේජ් එකකට යන්නෙ නෑ, Popup එක එනවා!
+          setIsProfileModalVisible(true); // this is a new thing becz do nt go to a new page i nstead of go to model
           return;
         }
 
@@ -65,7 +65,7 @@ export default function VolunteerDashboard() {
         }
       }
 
-      // 2. Profile එක සම්පූර්ණ නම් විතරක් Assignments ටික ගන්නවා
+      // 2.only if 
       if (currentProfile && currentProfile.base_district) {
         const assignmentsRes = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/assignments`, config);
         setAssignments(assignmentsRes.data);
@@ -86,10 +86,10 @@ export default function VolunteerDashboard() {
 
   const toggleSkill = (skill: string) => {
     if (editSkills.includes(skill)) {
-      // දැනටමත් තෝරලා නම් අයින් කරනවා (Deselect)
+      //if selected remove
       setEditSkills(editSkills.filter(s => s !== skill));
     } else {
-      // අලුතින් තෝරනවා නම් ඇඩ් කරනවා
+      // add if selct again
       setEditSkills([...editSkills, skill]);
     }
   };
@@ -191,8 +191,8 @@ export default function VolunteerDashboard() {
         config
       );
       Alert.alert('Success', 'Profile එක සාර්ථකව Update විය!');
-      setIsProfileModalVisible(false); // Modal එක වහනවා
-      fetchDashboardData(); // Dashboard එක රිෆ්‍රෙෂ් කරනවා
+      setIsProfileModalVisible(false); // close the model
+      fetchDashboardData(); // refresh dashboard by getting data from backend
     } catch (error) {
       console.error(error);
       Alert.alert('Error', 'Profile update කිරීම අසාර්ථකයි.');
@@ -200,7 +200,7 @@ export default function VolunteerDashboard() {
       setIsSaving(false);
     }
   };
-  const VALID_SKILL_VALUES = SRI_LANKAN_SKILLS.map(s => s.value); // 8 skill values ටිකම
+  const VALID_SKILL_VALUES = SRI_LANKAN_SKILLS.map(s => s.value); // 8 skill values 
 
 
 
@@ -223,7 +223,7 @@ export default function VolunteerDashboard() {
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           
-          {/* අලුතින් දාපු Profile Icon Button එක */}
+          {/* profile icon button */}
           <TouchableOpacity 
             style={{ marginRight: 15 }} 
             
@@ -241,7 +241,7 @@ export default function VolunteerDashboard() {
             <Ionicons name="person-circle" size={36} color="#33b5e5" />
           </TouchableOpacity>
 
-          {/* කලින් තිබ්බ Logout Button එක */}
+          {/* Logout button there before*/}
           <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
             <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
@@ -361,7 +361,7 @@ export default function VolunteerDashboard() {
               <Text style={styles.saveBtnText}>{isSaving ? 'Saving...' : 'Save Details'}</Text>
             </TouchableOpacity>
 
-            {/* දැනටමත් දිස්ත්‍රික්කයක් තියෙන කෙනෙක්ට විතරක් Modal එක වහන්න (Cancel) දෙන්න. අලුත් කෙනෙක් නම් අනිවාර්යයෙන් Save කරන්නම ඕනේ */}
+            {/* so if have a base destrict he can close the model.otherwise can*/}
             {profile?.base_district && (
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setIsProfileModalVisible(false)}>
                 <Text style={styles.cancelBtnText}>Close</Text>

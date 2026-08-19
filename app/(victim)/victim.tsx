@@ -157,12 +157,12 @@ export default function VictimHomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#040404' }, // Header එකේ පාටම SafeArea එකට දෙනවා
+  safeArea: { flex: 1, backgroundColor: '#040404' }, // give header color to safe area
   container: { flex: 1, backgroundColor: '#f9f9f9' },
   
   header: { 
     paddingHorizontal: 20, 
-    paddingTop: Platform.OS === 'android' ? 40 : 20, // Android status bar එකට ඉඩ
+    paddingTop: Platform.OS === 'android' ? 40 : 20, //space for android status bar
     paddingBottom: 8, 
     backgroundColor: '#040404', 
     marginBottom: 10,
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
   
   logoutBtn: { 
     padding: 5, 
-    backgroundColor: 'rgba(255, 68, 68, 0.15)', // ලා රතු background එකක්
+    backgroundColor: 'rgba(255, 68, 68, 0.15)', // light red
     borderRadius: 12,
   },
 

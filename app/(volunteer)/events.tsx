@@ -20,15 +20,14 @@ export default function EventsFeed() {
   const fetchEvents = async () => {
     setIsLoading(true);
     try {
-      console.log("මම මේ ලින්ක් එකට තමයි යන්නේ: ", `${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/events`); // ලින්ක් එක හරිද බලමු
       
       const config = await getAuthHeader();
       const response = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/events`, config);
       setEvents(response.data);
     } catch (error: any) {
-      // මෙන්න මෙහෙමයි Error එකක් හරියටම පෝස්ට්මෝටම් කරන්නේ:
+      // how postmotem a error
       if (error.response) {
-        console.error("Backend එකෙන් ආපු අවුල:", error.response.status, error.response.data);
+        console.error("Backend එකෙන් ආපු අවුල:", error.response.status, error.response.data); 
       } else if (error.request) {
         console.error("Backend එකට කතා කරන්න බැහැ (Server Down ද?):", error.request);
       } else {
@@ -41,13 +40,13 @@ export default function EventsFeed() {
   };
 
 
-  // භයානකකම (Severity) අනුව පාට වෙනස් කරන්න පොඩි ෆන්ක්ෂන් එකක්
-  const getSeverityColor = (severity: string) => {
+  // a small function to change color by severity
+  const getSeverityColor = (severity: string) => { //look at also javascript have switch case
     switch (severity) {
-      case 'CRITICAL': return '#CC0000'; // තද රතු
-      case 'HIGH': return '#ff4444'; // රතු
-      case 'MEDIUM': return '#FF8800'; // තැඹිලි
-      default: return '#00C851'; // කොළ
+      case 'CRITICAL': return '#CC0000'; 
+      case 'HIGH': return '#ff4444'; 
+      case 'MEDIUM': return '#FF8800'; 
+      default: return '#00C851'; 
     }
   };
 

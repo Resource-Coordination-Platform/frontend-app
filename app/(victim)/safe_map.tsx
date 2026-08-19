@@ -15,7 +15,7 @@ export default function SafeMapScreen() {
   useEffect(() => {
     (async () => {
       try {
-        // 1. User ගේ වර්තමාන Location එක ගන්නවා
+        // 1.get the location from user
         let { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
           Alert.alert('අවධානයයි', 'සිතියම බැලීමට Location සඳහා අවසර ලබා දිය යුතුය.');
@@ -27,18 +27,13 @@ export default function SafeMapScreen() {
         setLocation({
           latitude: loc.coords.latitude,
           longitude: loc.coords.longitude,
-          latitudeDelta: 0.05, // මැප් එකේ Zoom Level එක
+          latitudeDelta: 0.05, // oom level of the map
           longitudeDelta: 0.05,
         });
 
-        // 2. Backend එකෙන් ආරක්ෂිත ස්ථාන (Tenants/Camps) ටික ගන්නවා
-        // (මේ Endpoint එක අපි ඉස්සරහට හදමු, දැනට බොරු ඩේටා ටිකක් දාමු වැඩ කරනවද බලන්න)
-        /* 
-        const res = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/safe-zones`);
-        setSafeZones(res.data);
-        */
 
-        // Test කිරීම සඳහා බොරු (Mock) ඩේටා ටිකක්
+
+        // mock data for testing
         setSafeZones([
           { id: 1, name: 'අම්බලන්ගොඩ මධ්‍ය මහා විද්‍යාලය (සහන කඳවුර)', lat: loc.coords.latitude + 0.01, lng: loc.coords.longitude + 0.01, type: 'camp' },
           { id: 2, name: 'රතු කුරුස සංවිධානය - ගාල්ල ශාඛාව', lat: loc.coords.latitude - 0.015, lng: loc.coords.longitude - 0.01, type: 'medical' }
@@ -71,15 +66,15 @@ export default function SafeMapScreen() {
         <MapView 
           style={styles.map} 
           initialRegion={location}
-          showsUserLocation={true} // User ඉන්න තැන නිල් පාට තිතකින් පෙන්වයි
+          showsUserLocation={true} // User live location showing in blue
         >
           
-          {/* Safe Zones ටික සිතියමේ Pin කරනවා */}
+          {/*pin safe zones */}
           {safeZones.map((zone) => (
             <Marker
               key={zone.id}
               coordinate={{ latitude: zone.lat, longitude: zone.lng }}
-              pinColor={zone.type === 'medical' ? 'red' : 'green'} // බෙහෙත් නම් රතු, කඳවුරු නම් කොළ
+              pinColor={zone.type === 'medical' ? 'red' : 'green'} // if medical show in red otherwise green
             >
               <Callout>
                 <View style={styles.callout}>

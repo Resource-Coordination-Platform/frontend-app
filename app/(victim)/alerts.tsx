@@ -12,14 +12,13 @@ export default function AlertsScreen() {
   const isMountedRef = useRef(true);
 
   const IP_ADDRESS = '172.20.10.5';
-  const REST_BACKEND_URL = `http://${IP_ADDRESS}:8000/api`;
   const WS_URL = `ws://${IP_ADDRESS}:8000/ws`;
 
   const fetchAlerts = async () => {
     try {
       const token = await SecureStore.getItemAsync('access_token');
       if (!token) return;
-      const res = await axios.get(`${REST_BACKEND_URL}/alerts`, {
+      const res = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/alerts`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setAlerts(res.data);
@@ -32,7 +31,7 @@ export default function AlertsScreen() {
   };
 
   const connectWebSocket = async () => {
-    // Already connected නම් skip
+    //If  Already connected then skip
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       console.log("✅ WS already connected, skipping");
       return;
@@ -53,7 +52,7 @@ export default function AlertsScreen() {
       const data = JSON.parse(event.data);
       if (data.type === 'alert') {
         setAlerts((prev) => {
-          // duplicate නම් skip කරනවා
+          // skip if alert already exists in the list (based on id)
           if (prev.some((a) => String(a.id) === String(data.id))) return prev;
           return [data, ...prev];
         });
@@ -72,7 +71,7 @@ export default function AlertsScreen() {
       console.log("⚠️ WS Closed:", e.code, e.reason);
       wsRef.current = null;
       
-      // Component mounted නම් auto-reconnect 3s පසුව
+      // if compenent mounted then try to reconnect after 3 seconds
       if (isMountedRef.current) {
         console.log("🔄 Auto-reconnecting in 3s...");
         setTimeout(() => {
@@ -89,7 +88,7 @@ export default function AlertsScreen() {
     fetchAlerts();
     connectWebSocket();
 
-    // App background/foreground detect — foreground එන ගමන් reconnect
+    // App background/foreground detect — if app comes to foreground then reconnect WS if not connected
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active' && isMountedRef.current) {
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {

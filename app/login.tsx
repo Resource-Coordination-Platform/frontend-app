@@ -29,7 +29,7 @@ export default function LoginScreen() {
       const decodedToken: any = jwtDecode(res.data.access_token);
       
       if (decodedToken.user_type === 'VICTIM') {
-        await SecureStore.setItemAsync('user_role', 'VICTIM');
+        await SecureStore.setItemAsync('user_role', 'VICTIM'); //very speacial because here save user_role in securestore and in index.tsx it get role from user_role
         router.replace('/victim');
       } else if (decodedToken.user_type === 'VOLUNTEER') {
         await SecureStore.setItemAsync('user_role', 'VOLUNTEER'); 

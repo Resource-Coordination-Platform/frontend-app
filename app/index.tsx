@@ -9,7 +9,6 @@ export default function Index() {
 
   useEffect(() => {
     async function checkUserSession() {
-      // කලින් සේව් කරපු token එකයි role එකයි ගන්නවා
       const token = await SecureStore.getItemAsync('access_token');
       const role = await SecureStore.getItemAsync('user_role'); 
       
@@ -23,7 +22,7 @@ export default function Index() {
     checkUserSession();
   }, []);
 
-  // Check කරනකන් පොඩි ලෝඩින් එකක් පෙන්වනවා
+  // show loading screen while checking
   if (isLoggedIn === null) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -32,11 +31,11 @@ export default function Index() {
     );
   }
 
-  // ලොග් වෙලා නම්, එයාගේ Role එක අනුව අදාල Dashboard එකට යවනවා (volunteer හෝ member)
+  //if logged in navigate to dashbord by userRole
   if (isLoggedIn) {
     return userRole === 'volunteer' ? <Redirect href="/volunteer" /> : <Redirect href="/victim" />;
   }
 
-  // මුකුත් නැත්නම් Welcome එකට යවනවා
+  // if not logged in redirect to welcome screen
   return <Redirect href="/welcome" />;
 }

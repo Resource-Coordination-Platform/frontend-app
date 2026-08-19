@@ -56,18 +56,17 @@ export default function DonateScreen() {
     try {
       const config = await getAuthHeader();
       const payload = {
-        // tenant_id: selectedCategory.tenant_id, // <--- මේක අලුතින් දාන්න
         tenant_id:"ce2114c9-08f1-44e8-8aec-de9173fab9f1",
-        category_id: "fd49baca-d81c-47c3-9ef6-86a3e7fad84d", // ID එක ගැලපෙන විදිහට බලලා දෙන්න
+        category_id: "fd49baca-d81c-47c3-9ef6-86a3e7fad84d", //for testing
         amount: amount,
-        quantity: 1 // දැනට එක පැකේජ් එකක් විදිහට යවමු
+        quantity: 1 // test data 
       };
 
-      // Backend එකෙන් Hash එකයි Order ID එකයි ඉල්ලගන්නවා
+      // get hash and order id from backend
       const res = await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/payments/checkout`, payload, config);
       const payData = res.data;
 
-      // WebView එක ඇතුළේ ලෝඩ් වෙන්න ඕනේ HTML Form එක හදනවා
+      // payhere webview
       const htmlForm = `
         <html>
           <body onload="document.getElementById('payhere-form').submit();">
@@ -102,11 +101,11 @@ export default function DonateScreen() {
   };
 
   const handleWebViewNavigation = (navState: any) => {
-    // PayHere එකෙන් අර අපි දීපු return_url එකට ආවම සල්ලි කැපිලා ඉවරයි කියලා අඳුරගන්නවා
+ //identif that money cost by return url from payhere
     if (navState.url.includes('/success')) {
       setIsPayModalVisible(false);
       Alert.alert('Payment Successful! 🎉', 'ඔබගේ පරිත්‍යාගයට බොහොම ස්තූතියි!');
-      fetchNeeds(); // ලිස්ට් එක රිෆ්‍රෙෂ් කරනවා
+      fetchNeeds(); // refresh needs list after sonation
     } else if (navState.url.includes('/cancel')) {
       setIsPayModalVisible(false);
       Alert.alert('Payment Cancelled', 'ඔබ ගෙවීම අවලංගු කර ඇත.');
@@ -147,7 +146,7 @@ export default function DonateScreen() {
       <Modal visible={isPayModalVisible} animationType="slide">
         <View style={styles.modalContainer}>
           {payHereHtml ? (
-            // සල්ලි ගෙවන WebView එක
+            // pay money webview
             <WebView 
               originWhitelist={['*']}
               source={{ html: payHereHtml }} 
@@ -155,7 +154,7 @@ export default function DonateScreen() {
               style={{ flex: 1, marginTop: 40 }}
             />
           ) : (
-            // ගාණ එන්ටර් කරන Form එක
+            // for that enter amount
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>පරිත්‍යාග කිරීම</Text>
               <Text style={{ marginBottom: 10 }}>ඔබ පරිත්‍යාග කිරීමට බලාපොරොත්තු වන {selectedCategory?.name} සඳහා මුදල (රු.):</Text>

@@ -11,11 +11,11 @@ export default function CrisisMapScreen() {
   const [tenants, setTenants] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ලංකාව මැදට වෙන්න Default Region එකක්
+  // default test region that center in srilanka
   const initialRegion = {
     latitude: 7.8731,
     longitude: 80.7718,
-    latitudeDelta: 3.5, // මුළු ලංකාවම පේන Zoom Level එකක්
+    latitudeDelta: 3.5, // 3.5 is a zoom level that show entrire srilanka
     longitudeDelta: 3.5,
   };
 
@@ -29,12 +29,12 @@ export default function CrisisMapScreen() {
       const token = await SecureStore.getItemAsync('access_token');
       const config = { headers: { Authorization: `Bearer ${token}` } };
 
-      // 1. Events ටික ගන්නවා (Red Pins)
+      // 1.get events from backend
       const eventsRes = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/events/active-map`, config);
       setEvents(eventsRes.data);
 
 
-      // 2. Tenants ලගේ Locations ටික ගන්නවා (Blue Pins)
+      // 2. get tenant locations from backend
       const tenantsRes = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/auth/tenants/locations`, config);
       setTenants(tenantsRes.data);
 
@@ -86,7 +86,7 @@ export default function CrisisMapScreen() {
                 latitude: Number(tenant.latitude),
                 longitude: Number(tenant.longitude),
               }}
-              pinColor="blue" // නිල් පාටින් පෙන්වනවා
+              pinColor="blue" 
             >
               <Callout style={styles.callout}>
                 <View style={styles.calloutContainer}>

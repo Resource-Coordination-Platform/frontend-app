@@ -6,7 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 
 
-// ඔයාගේ Supabase විස්තර මෙතනට දාන්න (මේවා config.ts එකට දැම්මත් කමක් නෑ)
+//this for upload image to supabase bucket
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY =process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ;
 
@@ -22,9 +22,9 @@ export default function ReportEventScreen() {
   const [description, setDescription] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
 
-  // පින්තූරයක් තෝරගන්න Function එක
+  // pick image function as a key arrow function representaion
   const pickImage = async () => {
-    // Gallery එකට යන්න අවසර ඉල්ලනවා
+    // asking permission to go to gallery
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (permissionResult.granted === false) {
       Alert.alert('අවසර අවශ්‍යයි', 'පින්තූර තෝරාගැනීමට Gallery එක සඳහා අවසර ලබාදෙන්න.');
@@ -35,7 +35,7 @@ export default function ReportEventScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
-      quality: 0.5, // 0.5 දැම්මම සයිස් එක ටිකක් අඩු වෙන නිසා ඉක්මනින් upload වෙනවා
+      quality: 0.5, // This use for optimizing.because when reduce quality in half it fast upload to supabase
     });
 
     if (!result.canceled) {
@@ -53,7 +53,7 @@ export default function ReportEventScreen() {
     let uploadedImageUrl = null;
 
     try {
-      // 1. පින්තූරයක් තියෙනවා නම් මුලින්ම ඒක Supabase Storage එකට Upload කරමු
+      // 1.if there is a image,upload to supabase
       if (imageUri) {
         const fileName = `report_${Date.now()}.jpg`;
         const formData = new FormData();
@@ -75,7 +75,7 @@ export default function ReportEventScreen() {
         });
 
         if (uploadRes.ok) {
-          // Public URL එක හදාගන්නවා
+          // image url that save in supabase table too
           uploadedImageUrl = `${SUPABASE_URL}/storage/v1/object/public/volunteer_reports/${fileName}`;
         } else {
           console.error("Image Upload Failed:", await uploadRes.text());
@@ -83,7 +83,7 @@ export default function ReportEventScreen() {
         }
       }
 
-      // 2. දැන් Backend එකට Report එක යවමු (අලුත් Schema එකට අනුව)
+      // 2.send report to backend
       const token = await SecureStore.getItemAsync('access_token');
       const config = { headers: { Authorization: `Bearer ${token}` } };
       
@@ -93,14 +93,14 @@ export default function ReportEventScreen() {
         district: district,
         city: city,
         description: description || "No description provided.",
-        image_url: uploadedImageUrl // අප්ලෝඩ් කරපු ලින්ක් එක යවනවා
+        image_url: uploadedImageUrl // so send image url also for he table
       };
 
       await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/reports`, payload, config);
       
       Alert.alert('Success!', 'ඔබේ වාර්තාව සාර්ථකව යොමු කළා. කණ්ඩායම මෙය ඉක්මනින් පරීක්ෂා කරාවි! 🏆');
       
-      // Form එක Clear කරනවා
+      // clear the form by set states to ""
       setDistrict('');
       setCity('');
       setDescription('');
