@@ -45,6 +45,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "07ea50c2-b0a3-4d91-96da-7e45566029c5"
+      }
+    },
+    "owner": "kairaxdreamlabss-team"
   }
 }
