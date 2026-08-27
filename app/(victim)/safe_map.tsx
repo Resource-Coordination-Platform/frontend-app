@@ -3,11 +3,13 @@ import { View, Text, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import MapView, { Marker, Callout } from 'react-native-maps';
 import * as Location from 'expo-location';
 import axios from 'axios';
+import * as SecureStore from 'expo-secure-store';
 import { FontAwesome5 } from '@expo/vector-icons';
+import { getItem, getItemAsync } from 'expo-secure-store';
 
 export default function SafeMapScreen() {
   const [location, setLocation] = useState<any>(null);
-  const [safeZones, setSafeZones] = useState<any[]>([]);
+  const [safeZones, setSafeZones] = useState<any[]>([]); //this use for make the safe zones array
   const [isLoading, setIsLoading] = useState(true);
 
 
@@ -27,17 +29,32 @@ export default function SafeMapScreen() {
         setLocation({
           latitude: loc.coords.latitude,
           longitude: loc.coords.longitude,
-          latitudeDelta: 0.05, // oom level of the map
+          latitudeDelta: 0.05, // zoom level of the map
           longitudeDelta: 0.05,
         });
 
 
 
-        // mock data for testing
-        setSafeZones([
-          { id: 1, name: 'අම්බලන්ගොඩ මධ්‍ය මහා විද්‍යාලය (සහන කඳවුර)', lat: loc.coords.latitude + 0.01, lng: loc.coords.longitude + 0.01, type: 'camp' },
-          { id: 2, name: 'රතු කුරුස සංවිධානය - ගාල්ල ශාඛාව', lat: loc.coords.latitude - 0.015, lng: loc.coords.longitude - 0.01, type: 'medical' }
-        ]);
+
+
+        // // mock data for testing
+        // setSafeZones([
+        //   { id: 1, name: 'අම්බලන්ගොඩ මධ්‍ය මහා විද්‍යාලය (සහන කඳවුර)', lat: loc.coords.latitude + 0.01, lng: loc.coords.longitude + 0.01, type: 'camp' },
+        //   { id: 2, name: 'රතු කුරුස සංවිධානය - ගාල්ල ශාඛාව', lat: loc.coords.latitude - 0.015, lng: loc.coords.longitude - 0.01, type: 'medical' }
+        // ]);
+
+        const token=await SecureStore.getItemAsync('access_token');
+        if (token){
+          const response = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/safe-zones`, {
+            headers: { Authorization: `Bearer ${token}` } 
+          });
+          console.log("Suceesfully safelocations fetched",response.data)
+          setSafeZones(response.data)
+        }else{
+          console.error("token cant find")
+        }  
+   
+
 
       } catch (error) {
         console.error("Map Error:", error);
