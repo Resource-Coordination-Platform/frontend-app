@@ -11,7 +11,7 @@ export default function AlertsScreen() {
   const wsRef = useRef<WebSocket | null>(null);
   const isMountedRef = useRef(true);
 
-  const IP_ADDRESS = '172.20.10.5';
+  const IP_ADDRESS = '192.168.8.161';
   const WS_URL = `ws://${IP_ADDRESS}:8000/ws`;
 
   const fetchAlerts = async () => {
