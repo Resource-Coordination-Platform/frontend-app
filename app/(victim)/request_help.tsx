@@ -6,6 +6,57 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location'; //for location 
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import * as TaskManager from 'expo-task-manager';
+import * as BackgroundFetch from 'expo-background-fetch'; //these 2 for background sent requests
+
+
+
+const BACKGROUND_SYNC_TASK = 'background-sync-task';
+
+
+TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
+  try {
+    const existingRequests = await AsyncStorage.getItem('offline_requests');
+    if (!existingRequests) return BackgroundFetch.BackgroundFetchResult.NoData;
+
+    const requestsList = JSON.parse(existingRequests);
+    if (requestsList.length === 0) return BackgroundFetch.BackgroundFetchResult.NoData;
+
+    // check if background have network
+    const netInfo = await NetInfo.fetch();
+    if (!netInfo.isConnected) return BackgroundFetch.BackgroundFetchResult.NoData;
+
+    console.log("Background Task: Syncing offline requests...");
+    const token = await SecureStore.getItemAsync('access_token');
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const syncPromises = requestsList.map(async (req: any) => {
+      const payload = {
+        disaster_type: req.disaster,
+        needs: req.needs,
+        description: req.description || null,
+        latitude: req.latitude || null,
+        longitude: req.longitude || null
+      };
+
+      return axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/requests`, payload, {
+        headers: Object.keys(headers).length > 0 ? headers : undefined
+      });
+    });
+
+    await Promise.all(syncPromises);
+    await AsyncStorage.removeItem('offline_requests');
+    
+    return BackgroundFetch.BackgroundFetchResult.NewData;
+  } catch (error) {
+    console.error("Background sync failed:", error);
+    return BackgroundFetch.BackgroundFetchResult.Failed;
+  }
+});
+
 
 
 export default function RequestHelpScreen() {
@@ -97,6 +148,28 @@ export default function RequestHelpScreen() {
   }, []);
 
 
+  ///////////////////////////////////////////////////////////////
+
+  useEffect(() => {
+    // Register the background task
+    async function registerBackgroundFetchAsync() {
+      try {
+        await BackgroundFetch.registerTaskAsync(BACKGROUND_SYNC_TASK, {
+          minimumInterval: 60 * 15, // 15 min each sending
+          stopOnTerminate: false,   // (Android only)
+          startOnBoot: true,        // even phone restart also run this
+        });
+        console.log("Background fetch registered!");
+      } catch (err) {
+        console.log("Background fetch failed to register:", err);
+      }
+    }
+
+    registerBackgroundFetchAsync();
+  }, []);
+
+
+
 
   const toggleNeed = (id: string) => {
     if (selectedNeeds.includes(id)) {
@@ -108,7 +181,7 @@ export default function RequestHelpScreen() {
 
 
 
-  //new functions added for offline sync
+  //new functions added for offline sync in foreground app
   const checkOfflineRequests = async () => {
     try {
       const existingRequests = await AsyncStorage.getItem('offline_requests');
@@ -133,11 +206,13 @@ export default function RequestHelpScreen() {
 
       // 1. get token first before call backend from secure store
       const token = await SecureStore.getItemAsync('access_token');
-      
-
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
 
       // 2. Send all requests to backend using Promise.all for parallel execution
-      const syncPromises = requestsList.map(async (req) => {
+      const syncPromises = requestsList.map(async (req: any) => {
         const payload = {
           disaster_type: req.disaster,
           needs: req.needs,
@@ -147,9 +222,7 @@ export default function RequestHelpScreen() {
         };
 
         return axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/requests`, payload, {
-          headers: {
-            Authorization: `Bearer ${token}` //send the token in the header for authentication
-          }
+          headers: Object.keys(headers).length > 0 ? headers : undefined
         });
       });
 
