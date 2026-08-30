@@ -2,10 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import MapView, { Marker, Callout } from 'react-native-maps';
 import * as Location from 'expo-location';
-import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
 import { FontAwesome5 } from '@expo/vector-icons';
-import { getItem, getItemAsync } from 'expo-secure-store';
+import { api } from '../../services/api';
 
 export default function SafeMapScreen() {
   const [location, setLocation] = useState<any>(null);
@@ -43,16 +41,9 @@ export default function SafeMapScreen() {
         //   { id: 2, name: 'රතු කුරුස සංවිධානය - ගාල්ල ශාඛාව', lat: loc.coords.latitude - 0.015, lng: loc.coords.longitude - 0.01, type: 'medical' }
         // ]);
 
-        const token=await SecureStore.getItemAsync('access_token');
-        if (token){
-          const response = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/safe-zones`, {
-            headers: { Authorization: `Bearer ${token}` } 
-          });
-          console.log("Suceesfully safelocations fetched",response.data)
-          setSafeZones(response.data)
-        }else{
-          console.error("token cant find")
-        }  
+        const response = await api.get('/safe-zones');
+        console.log("Successfully safelocations fetched", response.data);
+        setSafeZones(response.data);  
    
 
 

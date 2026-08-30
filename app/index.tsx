@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Redirect } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
 import { View, ActivityIndicator } from 'react-native';
+import { getAccessToken, getRefreshToken, getUserRole } from '../services/api';
 
 export default function Index() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
@@ -9,10 +9,11 @@ export default function Index() {
 
   useEffect(() => {
     async function checkUserSession() {
-      const token = await SecureStore.getItemAsync('access_token');
-      const role = await SecureStore.getItemAsync('user_role'); 
+      const token = await getAccessToken();
+      const refreshToken = await getRefreshToken();
+      const role = await getUserRole(); 
       
-      if (token && role) {
+      if ((token || refreshToken) && role) {
         setIsLoggedIn(true);
         setUserRole(role);
       } else {
@@ -31,9 +32,9 @@ export default function Index() {
     );
   }
 
-  //if logged in navigate to dashbord by userRole
+  // if logged in navigate to dashboard by userRole
   if (isLoggedIn) {
-    return userRole === 'volunteer' ? <Redirect href="/volunteer" /> : <Redirect href="/victim" />;
+    return userRole?.toUpperCase() === 'VOLUNTEER' ? <Redirect href="/volunteer" /> : <Redirect href="/victim" />;
   }
 
   // if not logged in redirect to welcome screen

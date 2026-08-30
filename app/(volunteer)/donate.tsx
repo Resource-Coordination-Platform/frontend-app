@@ -14,10 +14,9 @@ import {
   ScrollView,
   RefreshControl,
 } from 'react-native';
-import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
 import { WebView } from 'react-native-webview';
 import { FontAwesome5, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { api } from '../../services/api';
 
 const PRESET_AMOUNTS = [500, 1000, 2500, 5000];
 
@@ -37,18 +36,9 @@ export default function DonateScreen() {
     fetchNeeds();
   }, []);
 
-  const getAuthHeader = async () => {
-    const token = await SecureStore.getItemAsync('access_token');
-    return { headers: { Authorization: `Bearer ${token}` } };
-  };
-
   const fetchNeeds = async () => {
     try {
-      const config = await getAuthHeader();
-      const res = await axios.get(
-        `${process.env.EXPO_PUBLIC_BACKEND_URL}/inventory/needs`,
-        config
-      );
+      const res = await api.get('/inventory/needs');
       setNeeds(res.data);
     } catch (error) {
       console.error(error);
@@ -80,7 +70,6 @@ export default function DonateScreen() {
 
     setIsCheckingOut(true);
     try {
-      const config = await getAuthHeader();
       const payload = {
         tenant_id: selectedCategory?.tenant_id || 'ce2114c9-08f1-44e8-8aec-de9173fab9f1',
         category_id: selectedCategory?.category_id || 'fd49baca-d81c-47c3-9ef6-86a3e7fad84d',
@@ -88,11 +77,7 @@ export default function DonateScreen() {
         quantity: 1,
       };
 
-      const res = await axios.post(
-        `${process.env.EXPO_PUBLIC_BACKEND_URL}/payments/checkout`,
-        payload,
-        config
-      );
+      const res = await api.post('/payments/checkout', payload);
       const payData = res.data;
 
       const htmlForm = `

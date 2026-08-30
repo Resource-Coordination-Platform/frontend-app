@@ -16,9 +16,8 @@ import { FontAwesome5, MaterialCommunityIcons, MaterialIcons, Ionicons } from '@
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
-import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
 import { useRouter } from 'expo-router';
+import { api } from '../services/api';
 
 export default function OfflineSosScreen() {
   const router = useRouter();
@@ -132,13 +131,7 @@ export default function OfflineSosScreen() {
       setIsSyncing(true);
       console.log('Syncing offline SOS requests (Guest/Unauthenticated)...', requestsList);
 
-      // Check if any token exists (may be null if unauthenticated)
-      const token = await SecureStore.getItemAsync('access_token');
-      const headers: Record<string, string> = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
+      // Send requests (api client automatically attaches token if available)
       const syncPromises = requestsList.map(async (req: any) => {
         const payload = {
           disaster_type: req.disaster,
@@ -148,9 +141,7 @@ export default function OfflineSosScreen() {
           longitude: req.longitude || null,
         };
 
-        return axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/requests`, payload, {
-          headers: Object.keys(headers).length > 0 ? headers : undefined,
-        });
+        return api.post('/volunteer/requests', payload);
       });
 
       await Promise.all(syncPromises);

@@ -10,9 +10,8 @@ import {
   Platform,
 } from 'react-native';
 import MapView, { Marker, Callout } from 'react-native-maps';
-import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
 import { FontAwesome5, MaterialIcons } from '@expo/vector-icons';
+import { api } from '../../services/api';
 
 export default function CrisisMapScreen() {
   const [events, setEvents] = useState<any[]>([]);
@@ -34,21 +33,12 @@ export default function CrisisMapScreen() {
   const fetchMapEvents = async () => {
     setIsLoading(true);
     try {
-      const token = await SecureStore.getItemAsync('access_token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-
       // 1. Get events from backend
-      const eventsRes = await axios.get(
-        `${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/events/active-map`,
-        config
-      );
+      const eventsRes = await api.get('/volunteer/events/active-map');
       setEvents(eventsRes.data);
 
       // 2. Get tenant relief centers from backend
-      const tenantsRes = await axios.get(
-        `${process.env.EXPO_PUBLIC_BACKEND_URL}/auth/tenants/locations`,
-        config
-      );
+      const tenantsRes = await api.get('/auth/tenants/locations');
       setTenants(tenantsRes.data);
     } catch (error) {
       console.error('Map Load Error:', error);

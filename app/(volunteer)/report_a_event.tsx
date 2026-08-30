@@ -13,9 +13,9 @@ import {
   Platform,
 } from 'react-native';
 import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
 import * as ImagePicker from 'expo-image-picker';
 import { FontAwesome5, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { api } from '../../services/api';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -108,9 +108,6 @@ export default function ReportEventScreen() {
       }
 
       // 2. Send report to backend
-      const token = await SecureStore.getItemAsync('access_token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-
       const payload = {
         category: category,
         severity: severity,
@@ -120,7 +117,7 @@ export default function ReportEventScreen() {
         image_url: uploadedImageUrl,
       };
 
-      await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/reports`, payload, config);
+      await api.post('/volunteer/reports', payload);
 
       Alert.alert('Success!', 'ඔබේ වාර්තාව සාර්ථකව යොමු කළා. සහන කණ්ඩායම් මෙය ඉක්මනින් පරීක්ෂා කරාවි! 🏆');
 

@@ -4,10 +4,9 @@ import { FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location'; //for location 
-import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch'; //these 2 for background sent requests
+import { api } from '../../services/api';
 
 
 
@@ -27,11 +26,6 @@ TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
     if (!netInfo.isConnected) return BackgroundFetch.BackgroundFetchResult.NoData;
 
     console.log("Background Task: Syncing offline requests...");
-    const token = await SecureStore.getItemAsync('access_token');
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
 
     const syncPromises = requestsList.map(async (req: any) => {
       const payload = {
@@ -42,9 +36,7 @@ TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
         longitude: req.longitude || null
       };
 
-      return axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/requests`, payload, {
-        headers: Object.keys(headers).length > 0 ? headers : undefined
-      });
+      return api.post('/volunteer/requests', payload);
     });
 
     await Promise.all(syncPromises);
@@ -204,14 +196,7 @@ export default function RequestHelpScreen() {
 
       console.log("Syncing offline requests to server...", requestsList);
 
-      // 1. get token first before call backend from secure store
-      const token = await SecureStore.getItemAsync('access_token');
-      const headers: Record<string, string> = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      // 2. Send all requests to backend using Promise.all for parallel execution
+      // 1. Send all requests to backend using Promise.all for parallel execution
       const syncPromises = requestsList.map(async (req: any) => {
         const payload = {
           disaster_type: req.disaster,
@@ -221,9 +206,7 @@ export default function RequestHelpScreen() {
           longitude: req.longitude || null
         };
 
-        return axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/requests`, payload, {
-          headers: Object.keys(headers).length > 0 ? headers : undefined
-        });
+        return api.post('/volunteer/requests', payload);
       });
 
       // 3. await for all promises to complete, if any fails it will go to catch block

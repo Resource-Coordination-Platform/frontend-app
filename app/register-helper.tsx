@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { saveAuthTokens } from '../services/api';
 
 
 export default function RegisterHelper() {
@@ -29,10 +30,14 @@ export default function RegisterHelper() {
       });
 
       const loginResponse = await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/auth/login`, { email: email, password: password });
-      const accessToken = loginResponse.data.access_token;
+      const { access_token, refresh_token, tenant_id } = loginResponse.data;
 
-      await SecureStore.setItemAsync('access_token', accessToken);
-      await SecureStore.setItemAsync('user_role', 'volunteer');
+      await saveAuthTokens({
+        accessToken: access_token,
+        refreshToken: refresh_token,
+        userRole: 'VOLUNTEER',
+        tenantId: tenant_id,
+      });
 
       router.replace('/volunteer');
 

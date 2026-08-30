@@ -7,6 +7,8 @@ import { jwtDecode } from "jwt-decode";
 import { MaterialIcons } from '@expo/vector-icons';
 
 
+import { saveAuthTokens } from '../services/api';
+
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -25,14 +27,20 @@ export default function LoginScreen() {
         password: password
       });
 
-      await SecureStore.setItemAsync('access_token', res.data.access_token);
-      const decodedToken: any = jwtDecode(res.data.access_token);
+      const { access_token, refresh_token, tenant_id } = res.data;
+      const decodedToken: any = jwtDecode(access_token);
+      const role = decodedToken.user_type === 'VICTIM' ? 'VICTIM' : 'VOLUNTEER';
+
+      await saveAuthTokens({
+        accessToken: access_token,
+        refreshToken: refresh_token,
+        userRole: role,
+        tenantId: tenant_id,
+      });
       
-      if (decodedToken.user_type === 'VICTIM') {
-        await SecureStore.setItemAsync('user_role', 'VICTIM'); //very speacial because here save user_role in securestore and in index.tsx it get role from user_role
+      if (role === 'VICTIM') {
         router.replace('/victim');
-      } else if (decodedToken.user_type === 'VOLUNTEER') {
-        await SecureStore.setItemAsync('user_role', 'VOLUNTEER'); 
+      } else {
         router.replace('/volunteer');
       }
     } catch (error: any) {

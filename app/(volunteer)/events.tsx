@@ -11,9 +11,8 @@ import {
   SafeAreaView,
   Platform,
 } from 'react-native';
-import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
 import { FontAwesome5, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { api } from '../../services/api';
 
 export default function EventsFeed() {
   const [events, setEvents] = useState<any[]>([]);
@@ -24,18 +23,9 @@ export default function EventsFeed() {
     fetchEvents();
   }, []);
 
-  const getAuthHeader = async () => {
-    const token = await SecureStore.getItemAsync('access_token');
-    return { headers: { Authorization: `Bearer ${token}` } };
-  };
-
   const fetchEvents = async () => {
     try {
-      const config = await getAuthHeader();
-      const response = await axios.get(
-        `${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/events`,
-        config
-      );
+      const response = await api.get('/volunteer/events');
       setEvents(response.data);
     } catch (error: any) {
       if (error.response) {

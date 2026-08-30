@@ -15,10 +15,9 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
-import axios from 'axios';
 import { useRouter } from 'expo-router';
 import { FontAwesome5, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { api, clearAuthTokens } from '../../services/api';
 
 const SRI_LANKAN_SKILLS = [
   { value: 'first_aid', label: 'First Aid', icon: 'medkit' },
@@ -28,7 +27,9 @@ const SRI_LANKAN_SKILLS = [
   { value: 'medical_assistance', label: 'Medical Assistance', icon: 'user-md' },
   { value: 'driving_transport', label: 'Driving/Transport', icon: 'truck' },
   { value: 'boat_operating', label: 'Boat Operating', icon: 'ship' },
-  { value: 'coordination', label: 'Coordination', icon: 'users' },
+  { value: 'counseling', label: 'Counseling & Mental Health', icon: 'heartbeat' },
+  { value: 'cooking', label: 'Community Cooking', icon: 'fire' },
+  { value: 'technical', label: 'Technical / IT Support', icon: 'laptop' }
 ];
 
 export default function VolunteerDashboard() {
@@ -37,33 +38,24 @@ export default function VolunteerDashboard() {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Edit Profile States
   const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
   const [editDistrict, setEditDistrict] = useState('');
   const [editCity, setEditCity] = useState('');
   const [editSkills, setEditSkills] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  const VALID_SKILL_VALUES = SRI_LANKAN_SKILLS.map(s => s.value);
-
   useEffect(() => {
     fetchDashboardData();
   }, []);
 
-  const getAuthHeader = async () => {
-    const token = await SecureStore.getItemAsync('access_token');
-    return { headers: { Authorization: `Bearer ${token}` } };
-  };
-
   const fetchDashboardData = async () => {
     try {
-      const config = await getAuthHeader();
       let currentProfile = null;
 
       try {
-        const profileRes = await axios.get(
-          `${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/profiles/me`,
-          config
-        );
+        const profileRes = await api.get('/volunteer/profiles/me');
         currentProfile = profileRes.data;
         setProfile(currentProfile);
 
@@ -85,16 +77,14 @@ export default function VolunteerDashboard() {
       }
 
       if (currentProfile && currentProfile.base_district) {
-        const assignmentsRes = await axios.get(
-          `${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/assignments`,
-          config
-        );
+        const assignmentsRes = await api.get('/volunteer/assignments');
         setAssignments(assignmentsRes.data);
       }
     } catch (error: any) {
       if (error.response?.status === 401) {
         Alert.alert('Session Expired', 'ඔබගේ සැසිය අවසන් වී ඇත. කරුණාකර නැවත Login වන්න.');
-        handleLogout();
+        await clearAuthTokens();
+        router.replace('/welcome');
       } else {
         console.error(error);
         Alert.alert('Error', 'දත්ත ලබාගැනීමේදී දෝෂයක් ඇතිවිය.');
@@ -120,12 +110,7 @@ export default function VolunteerDashboard() {
 
   const toggleAvailability = async (value: boolean) => {
     try {
-      const config = await getAuthHeader();
-      await axios.patch(
-        `${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/profiles/me/availability`,
-        { available_status: value },
-        config
-      );
+      await api.patch('/volunteer/profiles/me/availability', { available_status: value });
       setProfile({ ...profile, available_status: value });
     } catch (error: any) {
       if (error.response?.status === 422) {
@@ -138,12 +123,7 @@ export default function VolunteerDashboard() {
 
   const handleAccept = async (assignmentId: string) => {
     try {
-      const config = await getAuthHeader();
-      await axios.post(
-        `${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/assignments/${assignmentId}/accept`,
-        {},
-        config
-      );
+      await api.post(`/volunteer/assignments/${assignmentId}/accept`, {});
       Alert.alert('Success', 'ඔබ මෙම assignment එක accept කර ඇත! 🚀');
       fetchDashboardData();
     } catch (error: any) {
@@ -160,12 +140,7 @@ export default function VolunteerDashboard() {
 
   const handleDecline = async (assignmentId: string) => {
     try {
-      const config = await getAuthHeader();
-      await axios.post(
-        `${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/assignments/${assignmentId}/decline`,
-        {},
-        config
-      );
+      await api.post(`/volunteer/assignments/${assignmentId}/decline`, {});
       Alert.alert('Declined', 'ඔබ assignment එක ප්‍රතික්ෂේප කළා.');
       fetchDashboardData();
     } catch (error) {
@@ -175,12 +150,7 @@ export default function VolunteerDashboard() {
 
   const handleEnRoute = async (assignmentId: string) => {
     try {
-      const config = await getAuthHeader();
-      await axios.post(
-        `${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/assignments/${assignmentId}/en-route`,
-        {},
-        config
-      );
+      await api.post(`/volunteer/assignments/${assignmentId}/en-route`, {});
       Alert.alert('On the way!', 'ඔබ ස්ථානයට ගමන් කරන බව යාවත්කාලීන විය. පරිස්සමින් යන්න! 🚶‍♂️');
       fetchDashboardData();
     } catch (error) {
@@ -190,12 +160,7 @@ export default function VolunteerDashboard() {
 
   const handleComplete = async (assignmentId: string) => {
     try {
-      const config = await getAuthHeader();
-      await axios.post(
-        `${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/assignments/${assignmentId}/complete`,
-        {},
-        config
-      );
+      await api.post(`/volunteer/assignments/${assignmentId}/complete`, {});
       Alert.alert('Mission Accomplished!', 'නියමයි! ඔබ සාර්ථකව මෙහෙයුම අවසන් කළා. ස්තූතියි! 🏆');
       fetchDashboardData();
     } catch (error) {
@@ -210,13 +175,14 @@ export default function VolunteerDashboard() {
         text: 'ඔව්',
         style: 'destructive',
         onPress: async () => {
-          await SecureStore.deleteItemAsync('access_token');
-          await SecureStore.deleteItemAsync('user_role');
+          await clearAuthTokens();
           router.replace('/welcome');
         },
       },
     ]);
   };
+
+  const VALID_SKILL_VALUES = SRI_LANKAN_SKILLS.map(s => s.value);
 
   const saveProfile = async () => {
     if (!editDistrict || !editCity || editSkills.length === 0) {
@@ -225,17 +191,12 @@ export default function VolunteerDashboard() {
     }
     setIsSaving(true);
     try {
-      const config = await getAuthHeader();
-      await axios.put(
-        `${process.env.EXPO_PUBLIC_BACKEND_URL}/volunteer/profiles/me`,
-        {
-          base_district: editDistrict,
-          city: editCity,
-          available_status: profile?.available_status || false,
-          skills: editSkills,
-        },
-        config
-      );
+      await api.put('/volunteer/profiles/me', {
+        base_district: editDistrict,
+        city: editCity,
+        available_status: profile?.available_status || false,
+        skills: editSkills,
+      });
       Alert.alert('Success', 'Profile එක සාර්ථකව Update විය!');
       setIsProfileModalVisible(false);
       fetchDashboardData();

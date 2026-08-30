@@ -6,6 +6,7 @@ import * as Location from 'expo-location';
 import NetInfo from '@react-native-community/netinfo';
 import axios from 'axios';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { saveAuthTokens } from '../services/api';
 
 export default function RegisterVictim() {
   const router = useRouter();
@@ -67,12 +68,14 @@ export default function RegisterVictim() {
       });
 
       const loginResponse = await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/auth/login`, { email: email, password: password });
-      const accessToken = loginResponse.data.access_token;
-      const tenantId = loginResponse.data.tenant_id; 
+      const { access_token, refresh_token, tenant_id } = loginResponse.data;
 
-      await SecureStore.setItemAsync('access_token', accessToken);
-      await SecureStore.setItemAsync('user_role', 'victim');
-      if (tenantId) await SecureStore.setItemAsync('tenant_id', tenantId);
+      await saveAuthTokens({
+        accessToken: access_token,
+        refreshToken: refresh_token,
+        userRole: 'VICTIM',
+        tenantId: tenant_id,
+      });
 
       router.replace('/victim');
 

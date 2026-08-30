@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, AppState } from 'react-native';
-import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { api, getAccessToken } from '../../services/api';
 
 export default function AlertsScreen() {
   const [alerts, setAlerts] = useState<any[]>([]);
@@ -16,11 +15,7 @@ export default function AlertsScreen() {
 
   const fetchAlerts = async () => {
     try {
-      const token = await SecureStore.getItemAsync('access_token');
-      if (!token) return;
-      const res = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL}/alerts`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get('/alerts');
       setAlerts(res.data);
     } catch (error: any) {
       console.error("Failed to fetch alerts:", error.message);
@@ -31,13 +26,13 @@ export default function AlertsScreen() {
   };
 
   const connectWebSocket = async () => {
-    //If  Already connected then skip
+    //If Already connected then skip
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       console.log("✅ WS already connected, skipping");
       return;
     }
 
-    const token = await SecureStore.getItemAsync('access_token');
+    const token = await getAccessToken();
     if (!token || !isMountedRef.current) return;
 
     const ws = new WebSocket(WS_URL, ['bearer', token]);
