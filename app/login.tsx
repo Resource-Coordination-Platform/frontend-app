@@ -6,7 +6,8 @@ import axios from 'axios';
 import { jwtDecode } from "jwt-decode";
 import { MaterialIcons } from '@expo/vector-icons';
 
-const BACKEND_URL = 'http://172.22.192.42:8001/api';  
+
+import { saveAuthTokens } from '../services/api';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -21,19 +22,25 @@ export default function LoginScreen() {
     }
     setIsLoading(true);
     try {
-      const res = await axios.post(`${BACKEND_URL}/auth/login`, {
+      const res = await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/auth/login`, {
         email: email,
         password: password
       });
 
-      await SecureStore.setItemAsync('access_token', res.data.access_token);
-      const decodedToken: any = jwtDecode(res.data.access_token);
+      const { access_token, refresh_token, tenant_id } = res.data;
+      const decodedToken: any = jwtDecode(access_token);
+      const role = decodedToken.user_type === 'VICTIM' ? 'VICTIM' : 'VOLUNTEER';
+
+      await saveAuthTokens({
+        accessToken: access_token,
+        refreshToken: refresh_token,
+        userRole: role,
+        tenantId: tenant_id,
+      });
       
-      if (decodedToken.user_type === 'VICTIM') {
-        await SecureStore.setItemAsync('user_role', 'VICTIM');
+      if (role === 'VICTIM') {
         router.replace('/victim');
-      } else if (decodedToken.user_type === 'VOLUNTEER') {
-        await SecureStore.setItemAsync('user_role', 'VOLUNTEER'); 
+      } else {
         router.replace('/volunteer');
       }
     } catch (error: any) {

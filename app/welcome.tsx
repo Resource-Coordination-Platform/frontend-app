@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, StatusBar } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { FontAwesome5, MaterialIcons } from '@expo/vector-icons';
 
@@ -15,7 +16,10 @@ export default function WelcomeScreen() {
         {/* --- Header Section --- */}
         <View style={styles.headerContainer}>
           <View style={styles.logoContainer}>
-            <MaterialIcons name="volunteer-activism" size={50} color="#E53935" />
+            <Image 
+              source={require('../assets/images/icon2.png')} 
+              style={styles.logoImage} 
+            />
           </View>
           <Text style={styles.title}>සහස්‍ර (Sahasra)</Text>
           <Text style={styles.subtitle}>ආපදා කළමනාකරණ පද්ධතිය</Text>
@@ -78,7 +82,7 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F3F4F6', // ලා අළු පාට පසුබිමක්
+    backgroundColor: '#F3F4F6', 
   },
   container: {
     flex: 1,
@@ -90,11 +94,19 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   logoContainer: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
     backgroundColor: '#FFEBEE',
-    padding: 15,
-    borderRadius: 50,
-    marginBottom: 15,
-    elevation: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    overflow: 'hidden',
   },
   title: {
     fontSize: 32,
@@ -176,5 +188,10 @@ const styles = StyleSheet.create({
     color: '#3B82F6',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  logoImage: {
+    width: 120,
+    height: 120,
+    resizeMode: 'cover',
   },
 });

@@ -3,10 +3,10 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import * as Location from 'expo-location';
+import NetInfo from '@react-native-community/netinfo';
 import axios from 'axios';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
-
-const BACKEND_URL = 'http://172.22.192.42:8001/api'; 
+import { saveAuthTokens } from '../services/api';
 
 export default function RegisterVictim() {
   const router = useRouter();
@@ -17,6 +17,10 @@ export default function RegisterVictim() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  const navigateToOfflineSos = () => {
+    router.push('/offline-sos');
+  };
+
   const handleRegister = async () => {
     if (!fullName || !email || !password) {
       Alert.alert('Error', 'කරුණාකර සියලුම තොරතුරු ඇතුලත් කරන්න.');
@@ -26,6 +30,28 @@ export default function RegisterVictim() {
     setIsLoading(true);
 
     try {
+      // 1. Check network connectivity
+      const netInfo = await NetInfo.fetch();
+      if (!netInfo.isConnected || netInfo.isInternetReachable === false) {
+        setIsLoading(false);
+        Alert.alert(
+          'සංඥා නොමැත (No Signal)',
+          'ඔබට මේ මොහොතේ අන්තර්ජාල සම්බන්ධතාවයක් නොමැත. කරුණාකර හදිසි ආධාර ලබා ගැනීම සඳහා නොබැඳි මාදිලියට (Offline SOS Mode) පිවිසෙන්න.',
+          [
+            {
+              text: 'නැත',
+              style: 'cancel'
+            },
+            {
+              text: 'Offline SOS වෙත යන්න',
+              style: 'default',
+              onPress: navigateToOfflineSos //router.push(offline.sos)
+            }
+          ]
+        );
+        return;
+      }
+
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('අවධානයයි', 'ලියාපදිංචි වීමට ඔබගේ ස්ථානය (Location) ලබා දීම අනිවාර්ය වේ.');
@@ -37,24 +63,42 @@ export default function RegisterVictim() {
       const lat = location.coords.latitude;
       const lng = location.coords.longitude;
 
-      await axios.post(`${BACKEND_URL}/auth/register`, {
+      await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/auth/register`, {
         email: email, password: password, full_name: fullName, phone: phone, user_type: 'VICTIM', latitude: lat, longitude: lng
       });
 
-      const loginResponse = await axios.post(`${BACKEND_URL}/auth/login`, { email: email, password: password });
-      const accessToken = loginResponse.data.access_token;
-      const tenantId = loginResponse.data.tenant_id; 
+      const loginResponse = await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/auth/login`, { email: email, password: password });
+      const { access_token, refresh_token, tenant_id } = loginResponse.data;
 
-      await SecureStore.setItemAsync('access_token', accessToken);
-      await SecureStore.setItemAsync('user_role', 'victim');
-      if (tenantId) await SecureStore.setItemAsync('tenant_id', tenantId);
+      await saveAuthTokens({
+        accessToken: access_token,
+        refreshToken: refresh_token,
+        userRole: 'VICTIM',
+        tenantId: tenant_id,
+      });
 
       router.replace('/victim');
 
     } catch (error: any) {
       console.error(error);
-      const errorMsg = error.response?.data?.detail || 'Registration failed. කරුණාකර නැවත උත්සහ කරන්න.';
-      Alert.alert('Error', errorMsg);
+      const isNetworkErr = !error.response || error.code === 'ERR_NETWORK' || error.message?.toLowerCase().includes('network');
+      
+      if (isNetworkErr) {
+        Alert.alert(
+          'සංඥා නොමැත (Network Error)',
+          'සර්වර් එක සම්බන්ධ කරගත නොහැක. ඔබගේ හදිසි ආධාර ඉල්ලීම Offline SOS Mode හරහා යොමු කළ හැක.',
+          [
+            { text: 'නැවත උත්සාහ කරන්න', style: 'cancel' },
+            { 
+              text: 'Offline SOS වෙත යන්න', 
+              onPress: navigateToOfflineSos 
+            }
+          ]
+        );
+      } else {
+        const errorMsg = error.response?.data?.detail || 'Registration failed. කරුණාකර නැවත උත්සහ කරන්න.';
+        Alert.alert('Error', errorMsg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -119,7 +163,7 @@ export default function RegisterVictim() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F3F4F6' },
   container: { flexGrow: 1, justifyContent: 'center', padding: 25 },
-  header: { alignItems: 'center', marginBottom: 30 },
+  header: { alignItems: 'center', marginBottom: 25 },
   iconCircle: { width: 80, height: 80, backgroundColor: '#FFEBEE', borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 15, elevation: 2 },
   title: { fontSize: 28, fontWeight: '900', color: '#1F2937', marginBottom: 5 },
   subtitle: { fontSize: 14, color: '#6B7280' },
@@ -129,6 +173,27 @@ const styles = StyleSheet.create({
   input: { flex: 1, paddingVertical: 15, fontSize: 16, color: '#1F2937' },
   button: { backgroundColor: '#E53935', paddingVertical: 15, borderRadius: 12, alignItems: 'center', marginTop: 10, elevation: 2 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  backBtn: { marginTop: 25, alignItems: 'center' },
+  offlineBannerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF5F5',
+    borderWidth: 1.5,
+    borderColor: '#FFCDD2',
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 20,
+    elevation: 1,
+  },
+  offlineBannerTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#D32F2F',
+  },
+  offlineBannerSub: {
+    fontSize: 12,
+    color: '#E53935',
+    marginTop: 2,
+  },
+  backBtn: { marginTop: 15, alignItems: 'center' },
   backBtnText: { color: '#6B7280', fontSize: 15, fontWeight: '600' }
 });

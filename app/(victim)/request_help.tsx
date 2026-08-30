@@ -4,22 +4,64 @@ import { FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location'; //for location 
-import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
+import * as TaskManager from 'expo-task-manager';
+import * as BackgroundFetch from 'expo-background-fetch'; //these 2 for background sent requests
+import { api } from '../../services/api';
 
-const BACKEND_URL = 'http://172.22.192.42:8004/api';
+
+
+const BACKGROUND_SYNC_TASK = 'background-sync-task';
+
+
+TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
+  try {
+    const existingRequests = await AsyncStorage.getItem('offline_requests');
+    if (!existingRequests) return BackgroundFetch.BackgroundFetchResult.NoData;
+
+    const requestsList = JSON.parse(existingRequests);
+    if (requestsList.length === 0) return BackgroundFetch.BackgroundFetchResult.NoData;
+
+    // check if background have network
+    const netInfo = await NetInfo.fetch();
+    if (!netInfo.isConnected) return BackgroundFetch.BackgroundFetchResult.NoData;
+
+    console.log("Background Task: Syncing offline requests...");
+
+    const syncPromises = requestsList.map(async (req: any) => {
+      const payload = {
+        disaster_type: req.disaster,
+        needs: req.needs,
+        description: req.description || null,
+        latitude: req.latitude || null,
+        longitude: req.longitude || null
+      };
+
+      return api.post('/volunteer/requests', payload);
+    });
+
+    await Promise.all(syncPromises);
+    await AsyncStorage.removeItem('offline_requests');
+    
+    return BackgroundFetch.BackgroundFetchResult.NewData;
+  } catch (error) {
+    console.error("Background sync failed:", error);
+    return BackgroundFetch.BackgroundFetchResult.Failed;
+  }
+});
+
+
 
 export default function RequestHelpScreen() {
   const [disasterType, setDisasterType] = useState<string | null>(null);
-  const [otherDisaster, setOtherDisaster] = useState(''); // 'වෙනත්' ආපදාව ලියන්න
+  const [otherDisaster, setOtherDisaster] = useState(''); // for input other disaster type if user selects 'වෙනත්' (other)
   
   const [selectedNeeds, setSelectedNeeds] = useState<string[]>([]);
-  const [otherNeed, setOtherNeed] = useState(''); // 'වෙනත්' අවශ්‍යතාවය ලියන්න
+  const [otherNeed, setOtherNeed] = useState(''); // for input other need if user selects 'වෙනත්' (other)
   
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 🚨 වැඩි කරපු ආපදා වර්ග
+
   const disasterOptions = [
     { id: 'flood', label: 'ගංවතුර', icon: 'water' },
     { id: 'landslide', label: 'නායයෑම්', icon: 'image-filter-hdr' },
@@ -29,7 +71,7 @@ export default function RequestHelpScreen() {
     { id: 'other', label: 'වෙනත්', icon: 'dots-horizontal' },
   ];
 
-  // 📦 වැඩි කරපු අවශ්‍යතා වර්ග
+
   const needsOptions = [
     { id: 'cooked_food', label: 'පිසූ ආහාර', icon: 'hamburger' },
     { id: 'dry_rations', label: 'වියළි ආහාර', icon: 'box' },
@@ -42,25 +84,24 @@ export default function RequestHelpScreen() {
   ];
 
 
-  // --- Offline Sync සඳහා අලුත් States ---
+  // new states for offline sync
   const [offlineCount, setOfflineCount] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
 
-  // --- Location සඳහා අලුත් States ---
+  //new states for location langitude latitude
   const [locationCoords, setLocationCoords] = useState<{latitude: number, longitude: number} | null>(null);
   const [locationStatus, setLocationStatus] = useState('getting'); // 'getting' | 'done' | 'error'
 
-  // App එක ලෝඩ් වෙද්දිම සිග්නල් තියෙනවද බලනවා
+  // check if have signal when loading the app
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
       setIsOnline(!!state.isConnected);
       
-      // සිග්නල් ආපු ගමන්, යවන්න බැරි වුණු ඒව තියෙනවද බලලා යවනවා
       if (state.isConnected) {
         syncOfflineRequests(); //this function send offlinerequest to backend when online
       }
     });
-    checkOfflineRequests(); // මුලින්ම පරණ ඒව තියෙනවද බලන්න කෝල් කරනවා
+    checkOfflineRequests(); //first call to check number of offline requests when app loads
 
     return () => unsubscribe();
   }, []);
@@ -70,21 +111,21 @@ export default function RequestHelpScreen() {
   useEffect(() => {
     (async () => {
       try {
-        // 1. Permission ඉල්ලනවා
+        // 1.request permission for location
         let { status } = await Location.requestForegroundPermissionsAsync();
         
         if (status !== 'granted') {
-          // Permission දුන්නේ නැත්නම්
+          // if dont give permission then show alert and set location status to error
           setLocationStatus('error');
           return;
         }
 
-        // 2. Permission දුන්නා නම්, Location එක ගන්නවා (High Accuracy)
+        // 2. if given permission then get location
         let location = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.High
         });
 
-        // 3. ඩේටා ටික State එකට දාගන්නවා
+        // 3. put data into states
         setLocationCoords({
           latitude: location.coords.latitude,
           longitude: location.coords.longitude
@@ -99,6 +140,28 @@ export default function RequestHelpScreen() {
   }, []);
 
 
+  ///////////////////////////////////////////////////////////////
+
+  useEffect(() => {
+    // Register the background task
+    async function registerBackgroundFetchAsync() {
+      try {
+        await BackgroundFetch.registerTaskAsync(BACKGROUND_SYNC_TASK, {
+          minimumInterval: 60 * 15, // 15 min each sending
+          stopOnTerminate: false,   // (Android only)
+          startOnBoot: true,        // even phone restart also run this
+        });
+        console.log("Background fetch registered!");
+      } catch (err) {
+        console.log("Background fetch failed to register:", err);
+      }
+    }
+
+    registerBackgroundFetchAsync();
+  }, []);
+
+
+
 
   const toggleNeed = (id: string) => {
     if (selectedNeeds.includes(id)) {
@@ -110,7 +173,7 @@ export default function RequestHelpScreen() {
 
 
 
-  //new functions added for offline sync
+  //new functions added for offline sync in foreground app
   const checkOfflineRequests = async () => {
     try {
       const existingRequests = await AsyncStorage.getItem('offline_requests');
@@ -133,13 +196,8 @@ export default function RequestHelpScreen() {
 
       console.log("Syncing offline requests to server...", requestsList);
 
-      // 1. SecureStore එකෙන් Token එක ගන්නවා 
-      const token = await SecureStore.getItemAsync('access_token');
-      
-
-
-      // 2. Array එකේ තියෙන හැම Request එකක්ම Backend Schema එකට ගලපලා යවනවා
-      const syncPromises = requestsList.map(async (req) => {
+      // 1. Send all requests to backend using Promise.all for parallel execution
+      const syncPromises = requestsList.map(async (req: any) => {
         const payload = {
           disaster_type: req.disaster,
           needs: req.needs,
@@ -148,25 +206,21 @@ export default function RequestHelpScreen() {
           longitude: req.longitude || null
         };
 
-        return axios.post(`${BACKEND_URL}/volunteer/requests`, payload, {
-          headers: {
-            Authorization: `Bearer ${token}` // Token එක යවනවා
-          }
-        });
+        return api.post('/volunteer/requests', payload);
       });
 
-      // 3. ඔක්කොම API Calls ටික යනකන් මෙතනින් බලන් ඉන්නවා
+      // 3. await for all promises to complete, if any fails it will go to catch block
       await Promise.all(syncPromises);
 
-      // 4. සාර්ථකව ඔක්කොම යැව්වා නම් විතරක් ෆෝන් එකේ මෙමරියෙන් මකලා දානවා
+      // 4. if sent successfully then clear the offline requests from AsyncStorage and reset the count
       await AsyncStorage.removeItem('offline_requests');
-      setOfflineCount(0);
+      setOfflineCount(0);// again set state to zero
       
       Alert.alert("✅ Sync Complete", "ඔබගේ සියලුම හදිසි ඉල්ලීම් සර්වර් එක වෙත සාර්ථකව යොමු කරන ලදී! 🚀");
 
     } catch (error) {
       console.error("Failed to sync data:", error);
-      // මොකක් හරි Error එකක් ආවොත් අපි ඩේටා මකන්නේ නෑ, ඊළඟ පාර සිග්නල් ආවම ආයෙත් ට්‍රයි කරනවා
+      //if any error occurs during sync, we keep the offline requests in AsyncStorage for next time
     }
   };
 
@@ -174,23 +228,23 @@ export default function RequestHelpScreen() {
   
 
   const handleSubmit = async () => {   //this function called when user click the submit button
-    // 1. Validation: ආපදාව තෝරලාද?
+    // 1.if disaster type selected or not
     if (!disasterType) {
       Alert.alert('අවධානයයි', 'කරුණාකර සිදුවී ඇති ආපදාවේ ස්වභාවය තෝරන්න.');
       return;
     }
-    // 'වෙනත්' තෝරලා නම්, ඒක ලියලා තියෙන්න ඕනේ
+    // if user select  (other) then check if they write something in the input field :)
     if (disasterType === 'other' && otherDisaster.trim() === '') {
       Alert.alert('අවධානයයි', 'කරුණාකර ඔබගේ ආපදාව කුමක්දැයි සඳහන් කරන්න.');
       return;
     }
 
-    // 2. Validation: ආධාර තෝරලාද?
+    // 2. Validation: if select needs or not
     if (selectedNeeds.length === 0) {
       Alert.alert('අවධානයයි', 'කරුණාකර ඔබට අවශ්‍ය කුමන ආධාරයක්දැයි තෝරන්න.');
       return;
     }
-    // 'වෙනත්' තෝරලා නම්, ඒක ලියලා තියෙන්න ඕනේ
+    // it should be written if selected (other) in needs then check if they write something in the input field
     if (selectedNeeds.includes('other') && otherNeed.trim() === '') {
       Alert.alert('අවධානයයි', 'කරුණාකර ඔබට අවශ්‍ය වෙනත් ආධාරය කුමක්දැයි සඳහන් කරන්න.');
       return;
@@ -198,20 +252,19 @@ export default function RequestHelpScreen() {
 
     setIsSubmitting(true);
     
-    // Backend එකට යවන ඩේටා ටික මෙහෙමයි හැදෙන්නේ (ඉස්සරහට පාවිච්චි කරන්න ලේසියි)
+    // 3. Prepare the data to be sent to backend or saved offline
     const finalDisaster = disasterType === 'other' ? otherDisaster : disasterType;
     const finalNeeds = selectedNeeds.map(need => need === 'other' ? `other:${otherNeed}` : need);
 
     console.log("Submitting:", { finalDisaster, finalNeeds, description });
 
     
-    // මෙන්න මේකයි අපි අලුතින් හදන Object එක
+    // new request object to save in AsyncStorage
     const newRequest = {
       id: Date.now().toString(),
       disaster: finalDisaster,
       needs: finalNeeds,
       description: description,
-      // 👇 මේ පේළි දෙක අලුතින් එකතු කරන්න
       latitude: locationCoords ? locationCoords.latitude : null,
       longitude: locationCoords ? locationCoords.longitude : null,
       status: 'pending_sync',
@@ -219,18 +272,18 @@ export default function RequestHelpScreen() {
     };
 
     try {
-      // 1. කලින් සේව් කරපු ඒව ගන්නවා
+      //get existing offline requests from AsyncStorage and add the new one to it
       const existingRequests = await AsyncStorage.getItem('offline_requests');
       let requestsList = existingRequests ? JSON.parse(existingRequests) : [];
 
-      // 2. අලුත් එක ඒකට එකතු කරනවා
+      // push the new request to the list and save it back to AsyncStorage
       requestsList.push(newRequest);
       await AsyncStorage.setItem('offline_requests', JSON.stringify(requestsList));
       setOfflineCount(requestsList.length);
 
-      // 3. සිග්නල් තියෙනවද බලලා වැඩේ කරනවා
+      //check if online then send the request to backend immediately, else keep it in AsyncStorage for later sync
       if (isOnline) {
-        await syncOfflineRequests(); // සිග්නල් තියෙන නිසා එවෙලෙම යවනවා
+        await syncOfflineRequests(); //signal is there so send the request to backend
       } else {
         Alert.alert(
           "Saved Offline", 
@@ -254,7 +307,7 @@ export default function RequestHelpScreen() {
 
   return (
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
-       {/* නෙට්වර්ක් ස්ටේටස් එක */}
+       {/* network status badge */}
       <View style={{ padding: 8, backgroundColor: isOnline ? '#e6f7ed' : '#ffe6e6', alignItems: 'center', marginBottom: 10 }}>
         <Text style={{ fontWeight: 'bold', color: isOnline ? '#2e7d32' : '#c62828' }}>
           {isOnline ? "🟢 Online - Connected" : "🔴 Offline - No Internet"}
@@ -279,7 +332,7 @@ export default function RequestHelpScreen() {
         )}
       </View>
 
-      {/* යවන්න බැරි වුණු ඒව තියෙනවා නම් පෙන්වන Badge එක */}
+      {/* Offline Requests Badge */}
       {offlineCount > 0 && (
         <View style={{ backgroundColor: '#e6f0ff', padding: 10, borderRadius: 8, marginBottom: 15, marginHorizontal: 20 }}>
           <Text style={{ color: '#0052cc', fontWeight: 'bold', textAlign: 'center' }}>
@@ -293,7 +346,7 @@ export default function RequestHelpScreen() {
         <Text style={styles.subtitle}>ඔබගේ වත්මන් තත්ත්වය පහතින් දක්වන්න. ඔබගේ ස්ථානය අප ස්වයංක්‍රීයව හඳුනාගනිමු.</Text>
       </View>
 
-      {/* 🌪️ ආපදා වර්ගය තෝරන කොටස */}
+      {/* 🌪️ disaster type selecting part */}
       <Text style={styles.sectionTitle}>සිදුවී ඇති ආපදාව කුමක්ද?</Text>
       <View style={styles.optionsContainer}>
         {disasterOptions.map((option) => {
@@ -318,7 +371,7 @@ export default function RequestHelpScreen() {
         })}
       </View>
 
-      {/* 'වෙනත්' ආපදාව තේරුවොත් එන Input එක */}
+      {/* Other Disaster Input */}
       {disasterType === 'other' && (
         <TextInput
           style={styles.otherInput}
@@ -328,7 +381,7 @@ export default function RequestHelpScreen() {
         />
       )}
 
-      {/* 📦 අවශ්‍ය ආධාර තෝරන කොටස */}
+      {/* Needs Selection */}
       <Text style={styles.sectionTitle}>ඔබට අවශ්‍ය ආධාර මොනවාද?</Text>
       <View style={styles.optionsContainer}>
         {needsOptions.map((option) => {
@@ -342,7 +395,6 @@ export default function RequestHelpScreen() {
               <FontAwesome5 
                 name={option.icon} 
                 size={24} 
-                // කහ පාට බැක්ග්‍රවුන්ඩ් එකට කළු පාට අයිකන් එකක් ලස්සනයි
                 color={isSelected ? '#333' : '#FF9800'} 
                 style={{ marginBottom: 8 }} 
               />
@@ -354,7 +406,7 @@ export default function RequestHelpScreen() {
         })}
       </View>
 
-      {/* 'වෙනත්' ආධාරය තේරුවොත් එන Input එක */}
+      {/* Other Needs Input */}
       {selectedNeeds.includes('other') && (
         <TextInput
           style={styles.otherInput}
@@ -364,7 +416,7 @@ export default function RequestHelpScreen() {
         />
       )}
 
-      {/* අමතර විස්තර */}
+      {/* Additional Details */}
       <View style={styles.inputContainer}>
         <Text style={styles.sectionTitle}>අමතර විස්තර (විකල්ප):</Text>
         <TextInput
@@ -400,7 +452,7 @@ const styles = StyleSheet.create({
   
   optionsContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 5 },
   optionCard: {
-    width: '31%', // පේළියට 3ක් එන්න හැදුවා Buttons වැඩි නිසා (48% වෙනුවට 31%)
+    width: '31%', 
     backgroundColor: 'white',
     padding: 10,
     borderRadius: 10,
@@ -411,12 +463,12 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   
-  // ආපදා Button එක Select කළාම (තැඹිලි)
+  // Disaster Card selected color set to red
   disasterCardSelected: { backgroundColor: '#E53935', borderColor: '#E53935' },
   
-  // ආධාර Button එක Select කළාම (කහ පාට)
+  // Needs Card selected color set to yellow
   needsCardSelected: { backgroundColor: '#FFC107', borderColor: '#FFB300' },
-  needsTextSelected: { color: '#333' }, // කහ පසුබිමට තද කළු/අළු අකුරු
+  needsTextSelected: { color: '#333' }, 
   
   optionText: { fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
 

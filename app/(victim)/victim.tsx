@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, TouchableOpacity, Alert, SafeAreaView, Platform } from 'react-native';
-import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { api, clearAuthTokens } from '../../services/api';
 
 export default function VictimHomeScreen() {
   const [requests, setRequests] = useState<any[]>([]);
@@ -11,7 +10,6 @@ export default function VictimHomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const router = useRouter();
 
-  const BACKEND_URL = 'http://172.22.192.42:8004/api/volunteer/requests'; 
 
   const handleLogout = async () => {
     Alert.alert(
@@ -23,8 +21,7 @@ export default function VictimHomeScreen() {
           text: "ඔව්", 
           style: "destructive",
           onPress: async () => {
-            await SecureStore.deleteItemAsync('access_token');
-            await SecureStore.deleteItemAsync('user_role');
+            await clearAuthTokens();
             router.replace('/welcome');
           }
         }
@@ -34,16 +31,13 @@ export default function VictimHomeScreen() {
 
   const fetchMyRequests = async () => {
     try {
-      const token = await SecureStore.getItemAsync('access_token');
-      const res = await axios.get(`${BACKEND_URL}/my-requests`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
+      const res = await api.get('/volunteer/requests/my-requests');
       setRequests(res.data);
     } catch (error: any) {
       if (error.response?.status === 401) {
         Alert.alert('Session Expired', 'ඔබගේ සැසිය අවසන් වී ඇත. කරුණාකර නැවත Login වන්න.');
-        handleLogout();
+        await clearAuthTokens();
+        router.replace('/welcome');
       } else {
         console.error(error);
         Alert.alert('Error', 'දත්ත ලබාගැනීමේදී දෝෂයක් ඇතිවිය.');
@@ -158,12 +152,12 @@ export default function VictimHomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#040404' }, // Header එකේ පාටම SafeArea එකට දෙනවා
+  safeArea: { flex: 1, backgroundColor: '#040404' }, // give header color to safe area
   container: { flex: 1, backgroundColor: '#f9f9f9' },
   
   header: { 
     paddingHorizontal: 20, 
-    paddingTop: Platform.OS === 'android' ? 40 : 20, // Android status bar එකට ඉඩ
+    paddingTop: Platform.OS === 'android' ? 40 : 20, //space for android status bar
     paddingBottom: 8, 
     backgroundColor: '#040404', 
     marginBottom: 10,
@@ -183,7 +177,7 @@ const styles = StyleSheet.create({
   
   logoutBtn: { 
     padding: 5, 
-    backgroundColor: 'rgba(255, 68, 68, 0.15)', // ලා රතු background එකක්
+    backgroundColor: 'rgba(255, 68, 68, 0.15)', // light red
     borderRadius: 12,
   },
 
