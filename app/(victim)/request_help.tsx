@@ -422,8 +422,8 @@ export default function RequestHelpScreen() {
         <TextInput
           style={styles.input}
           placeholder="උදා: පවුලේ 4ක් ඉන්නවා, වතුර ගේ ඇතුළට ඇවිත්..."
-          multiline
-          numberOfLines={3}
+          // multiline
+          // numberOfLines={3}
           value={description}
           onChangeText={setDescription}
         />
