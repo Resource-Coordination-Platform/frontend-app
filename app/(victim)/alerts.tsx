@@ -11,7 +11,7 @@ export default function AlertsScreen() {
   const isMountedRef = useRef(true);
 
   const IP_ADDRESS = '192.168.8.161';
-  const WS_URL = `ws://${IP_ADDRESS}:8000/ws`;
+  const WS_URL = `ws://${process.env.EXPO_PUBLIC_BACKEND_URL?.split(':')[1]?.split('/')[2]}:8000/ws`;
 
   const fetchAlerts = async () => {
     try {
@@ -102,8 +102,6 @@ export default function AlertsScreen() {
       }
     };
   }, []);
-
-  // ... rest of your code (onRefresh, getSeverityStyle, renderItem, return, styles) same as before
 
 
   const onRefresh = () => {
