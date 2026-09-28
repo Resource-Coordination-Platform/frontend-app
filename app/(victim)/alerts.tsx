@@ -10,8 +10,14 @@ export default function AlertsScreen() {
   const wsRef = useRef<WebSocket | null>(null);
   const isMountedRef = useRef(true);
 
-  const IP_ADDRESS = '192.168.8.161';
-  const WS_URL = `ws://${process.env.EXPO_PUBLIC_BACKEND_URL?.split(':')[1]?.split('/')[2]}:8000/ws`;
+  // Derive WebSocket URL cleanly from EXPO_PUBLIC_BACKEND_URL
+  const getWsUrl = (token?: string) => {
+    const raw = (process.env.EXPO_PUBLIC_BACKEND_URL || 'http://192.168.8.161:8000/api').trim();
+    const base = raw.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+    const wsBase = base.replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:');
+    const endpoint = `${wsBase}/ws`;
+    return token ? `${endpoint}?token=${encodeURIComponent(token)}` : endpoint;
+  };
 
   const fetchAlerts = async () => {
     try {
@@ -26,7 +32,7 @@ export default function AlertsScreen() {
   };
 
   const connectWebSocket = async () => {
-    //If Already connected then skip
+    // If already connected then skip
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       console.log("✅ WS already connected, skipping");
       return;
@@ -35,38 +41,50 @@ export default function AlertsScreen() {
     const token = await getAccessToken();
     if (!token || !isMountedRef.current) return;
 
-    const ws = new WebSocket(WS_URL, ['bearer', token]);
+    const wsUrl = getWsUrl(token);
+    console.log("🔗 Connecting WebSocket to:", wsUrl);
+
+    // Pass token in both query param and subprotocol
+    const ws = new WebSocket(wsUrl, ['bearer', token]);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log("✅ WebSocket Connected Successfully!");
+      console.log("✅ WebSocket Connected Successfully to Alerts channel!");
     };
 
-   ws.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data.type === 'alert') {
-        setAlerts((prev) => {
-          // skip if alert already exists in the list (based on id)
-          if (prev.some((a) => String(a.id) === String(data.id))) return prev;
-          return [data, ...prev];
-        });
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("📩 Received WebSocket Event:", data);
+        if (data.type === 'alert') {
+          setAlerts((prev) => {
+            // skip/update if alert already exists in the list (based on id)
+            if (prev.some((a) => String(a.id) === String(data.id))) {
+              return prev.map((a) => (String(a.id) === String(data.id) ? { ...a, ...data } : a));
+            }
+            return [data, ...prev];
+          });
+        } else if (data.type === 'alert_status_updated') {
+          setAlerts((prev) =>
+            prev.map((a) => (String(a.id) === String(data.id) ? { ...a, status: data.status } : a))
+          );
+        } else if (data.type === 'alert_deleted') {
+          setAlerts((prev) => prev.filter((a) => String(a.id) !== String(data.id)));
+        }
+      } catch (e) {
+        console.error("WebSocket Message Parsing Error:", e);
       }
-    } catch (e) {
-      console.error("WebSocket Message Parsing Error:", e);
-    }
-  };
-
+    };
 
     ws.onerror = (e: any) => {
-      console.error("❌ WebSocket Error");
+      console.error("❌ WebSocket Error:", e?.message || e);
     };
 
     ws.onclose = (e) => {
       console.log("⚠️ WS Closed:", e.code, e.reason);
       wsRef.current = null;
       
-      // if compenent mounted then try to reconnect after 3 seconds
+      // if component mounted then try to reconnect after 3 seconds
       if (isMountedRef.current) {
         console.log("🔄 Auto-reconnecting in 3s...");
         setTimeout(() => {
@@ -83,7 +101,7 @@ export default function AlertsScreen() {
     fetchAlerts();
     connectWebSocket();
 
-    // App background/foreground detect — if app comes to foreground then reconnect WS if not connected
+    // App background/foreground detect — reconnect WS if needed
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active' && isMountedRef.current) {
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -103,14 +121,12 @@ export default function AlertsScreen() {
     };
   }, []);
 
-
   const onRefresh = () => {
     setRefreshing(true);
     fetchAlerts();
   };
 
-
-  // style acording to severity of the alert (HIGH, MEDIUM, LOW)
+  // style according to severity of the alert (HIGH, MEDIUM, LOW)
   const getSeverityStyle = (severity: string) => {
     switch (severity) {
       case 'HIGH':
@@ -124,20 +140,51 @@ export default function AlertsScreen() {
 
   const renderItem = ({ item }: { item: any }) => {
     const sevStyle = getSeverityStyle(item.severity);
+    const isClosed = item.status === 'CLOSED';
 
     return (
-      <View style={[styles.alertCard, { backgroundColor: sevStyle.bgColor, borderColor: sevStyle.color }]}>
+      <View
+        style={[
+          styles.alertCard,
+          {
+            backgroundColor: isClosed ? '#F5F5F5' : sevStyle.bgColor,
+            borderColor: isClosed ? '#BDBDBD' : sevStyle.color,
+            opacity: isClosed ? 0.75 : 1,
+          },
+        ]}
+      >
         <View style={styles.alertHeader}>
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-            <MaterialIcons name={sevStyle.icon as any} size={24} color={sevStyle.color} />
-            <Text style={[styles.alertTitle, { color: sevStyle.color }]}> {item.title}</Text>
+            <MaterialIcons
+              name={sevStyle.icon as any}
+              size={24}
+              color={isClosed ? '#757575' : sevStyle.color}
+            />
+            <Text
+              style={[
+                styles.alertTitle,
+                { color: isClosed ? '#424242' : sevStyle.color },
+              ]}
+            >
+              {' '}
+              {item.title}
+            </Text>
           </View>
+          {isClosed ? (
+            <View style={styles.closedBadge}>
+              <Text style={styles.closedBadgeText}>අවසන් (CLOSED)</Text>
+            </View>
+          ) : (
+            <View style={[styles.liveBadge, { backgroundColor: sevStyle.color }]}>
+              <Text style={styles.liveBadgeText}>LIVE</Text>
+            </View>
+          )}
         </View>
 
         <Text style={styles.alertMessage}>{item.message}</Text>
-        
+
         <Text style={styles.dateText}>
-           {new Date(item.created_at).toLocaleString()}
+          {new Date(item.created_at).toLocaleString()}
         </Text>
       </View>
     );
@@ -179,5 +226,28 @@ const styles = StyleSheet.create({
   alertMessage: { fontSize: 14, color: '#333', lineHeight: 20, marginBottom: 10 },
   dateText: { fontSize: 11, color: '#666', textAlign: 'right' },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 },
-  emptyText: { marginTop: 15, fontSize: 15, color: '#999' }
+  emptyText: { marginTop: 15, fontSize: 15, color: '#999' },
+  liveBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  liveBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  closedBadge: {
+    backgroundColor: '#757575',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  closedBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
 });
