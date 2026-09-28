@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,10 +14,10 @@ import {
 } from 'react-native';
 import { FontAwesome5, MaterialCommunityIcons, MaterialIcons, Ionicons } from '@expo/vector-icons';
 import NetInfo from '@react-native-community/netinfo';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NEED_UNITS, newHelpRequestId, enqueueHelpRequest, readOfflineHelpRequests, syncHelpRequests } from '../services/help-requests';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { api } from '../services/api';
+
 
 export default function OfflineSosScreen() {
   const router = useRouter();
@@ -27,6 +27,7 @@ export default function OfflineSosScreen() {
   const [otherDisaster, setOtherDisaster] = useState('');
   const [selectedNeeds, setSelectedNeeds] = useState<string[]>([]);
   const [otherNeed, setOtherNeed] = useState('');
+  const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [contactInfo, setContactInfo] = useState('');
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -61,9 +62,8 @@ export default function OfflineSosScreen() {
   ];
 
   // Request & capture GPS location
-  const fetchLocation = async () => {
+  const fetchLocation = useCallback(async () => {
     try {
-      setLocationStatus('getting');
       const { status } = await Location.requestForegroundPermissionsAsync();
 
       if (status !== 'granted') {
@@ -84,7 +84,28 @@ export default function OfflineSosScreen() {
       console.error('Location Error in Offline SOS:', error);
       setLocationStatus('error');
     }
-  };
+  }, []);
+
+  const checkOfflineRequests = useCallback(async () => {
+    try {
+      setOfflineCount((await readOfflineHelpRequests()).length);
+    } catch (e) {
+      console.log('Error reading offline data', e);
+    }
+  }, []);
+
+  const syncOfflineRequests = useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      const sent = await syncHelpRequests();
+      if (sent) Alert.alert('Sent successfully', 'Your requests and quantities were sent.');
+    } catch (error) {
+      Alert.alert('Saved on this phone', error instanceof Error ? error.message : 'Sign in and retry when connected.');
+    } finally {
+      await checkOfflineRequests();
+      setIsSyncing(false);
+    }
+  }, [checkOfflineRequests]);
 
   // Monitor network and load stored offline requests
   useEffect(() => {
@@ -96,74 +117,22 @@ export default function OfflineSosScreen() {
       setIsOnline(online);
 
       if (online) {
-        syncOfflineRequests();
+        void syncOfflineRequests();
+      } else {
+        void checkOfflineRequests();
       }
     });
 
-    checkOfflineRequests();
 
     return () => unsubscribe();
-  }, []);
-
-  const checkOfflineRequests = async () => {
-    try {
-      const existing = await AsyncStorage.getItem('offline_requests');
-      if (existing) {
-        const parsed = JSON.parse(existing);
-        setOfflineCount(parsed.length);
-      } else {
-        setOfflineCount(0);
-      }
-    } catch (e) {
-      console.log('Error reading offline data', e);
-    }
-  };
-
-  // Sync offline requests to backend without bearer token when user is unauthenticated
-  const syncOfflineRequests = async () => {
-    try {
-      const existing = await AsyncStorage.getItem('offline_requests');
-      if (!existing) return;
-
-      const requestsList = JSON.parse(existing);
-      if (requestsList.length === 0) return;
-
-      setIsSyncing(true);
-      console.log('Syncing offline SOS requests (Guest/Unauthenticated)...', requestsList);
-
-      // Send requests (api client automatically attaches token if available)
-      const syncPromises = requestsList.map(async (req: any) => {
-        const payload = {
-          disaster_type: req.disaster,
-          needs: req.needs,
-          description: req.description || null,
-          latitude: req.latitude || null,
-          longitude: req.longitude || null,
-        };
-
-        return api.post('/volunteer/requests', payload);
-      });
-
-      await Promise.all(syncPromises);
-      await AsyncStorage.removeItem('offline_requests');
-      setOfflineCount(0);
-
-      Alert.alert(
-        '✅ Sync සාර්ථකයි',
-        'ඔබගේ නොබැඳි හදිසි ආධාර ඉල්ලීම් සියල්ල සර්වර් එක වෙත සාර්ථකව යොමු කරන ලදී!'
-      );
-    } catch (error) {
-      console.error('Failed to sync offline requests:', error);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
+  }, [fetchLocation, checkOfflineRequests, syncOfflineRequests]);
 
   const toggleNeed = (id: string) => {
     if (selectedNeeds.includes(id)) {
       setSelectedNeeds(selectedNeeds.filter((item) => item !== id));
     } else {
       setSelectedNeeds([...selectedNeeds, id]);
+      setQuantities(q => ({ ...q, [id]: q[id] || '1' }));
     }
   };
 
@@ -188,6 +157,14 @@ export default function OfflineSosScreen() {
       return;
     }
 
+    if (selectedNeeds.some(id => !/^[0-9]+$/.test(quantities[id] || '') || Number(quantities[id]) < 1 || Number(quantities[id]) > 100000)) {
+      Alert.alert('Quantity required', 'Enter a whole quantity from 1 to 100000 for each selected aid type.');
+      return;
+    }
+    if (!locationCoords) {
+      Alert.alert('Location required', 'Enable location and retry so the volunteer can find you.');
+      return;
+    }
     setIsSubmitting(true);
 
     const finalDisaster = disasterType === 'other' ? otherDisaster : disasterType;
@@ -201,10 +178,15 @@ export default function OfflineSosScreen() {
     }
 
     const newRequest = {
-      id: Date.now().toString(),
+      id: newHelpRequestId(),
       disaster: finalDisaster,
       needs: finalNeeds,
-      description: combinedDescription || null,
+      requested_items: selectedNeeds.map(id => ({
+        code: id === 'other' ? `other:${otherNeed.trim()}` : id,
+        label: id === 'other' ? otherNeed.trim() : needsOptions.find(option => option.id === id)!.label,
+        quantity: Number(quantities[id]), unit: NEED_UNITS[id] || 'items',
+      })),
+      description: combinedDescription || '',
       latitude: locationCoords ? locationCoords.latitude : null,
       longitude: locationCoords ? locationCoords.longitude : null,
       status: 'pending_sync',
@@ -212,11 +194,7 @@ export default function OfflineSosScreen() {
     };
 
     try {
-      const existing = await AsyncStorage.getItem('offline_requests');
-      const requestsList = existing ? JSON.parse(existing) : [];
-      requestsList.push(newRequest);
-      await AsyncStorage.setItem('offline_requests', JSON.stringify(requestsList));
-      setOfflineCount(requestsList.length);
+      setOfflineCount(await enqueueHelpRequest(newRequest));
 
       // If connected to network, sync immediately; otherwise show offline confirmation
       if (isOnline) {
@@ -224,7 +202,7 @@ export default function OfflineSosScreen() {
       } else {
         Alert.alert(
           '💾 නොබැඳිව සුරැකිණි (Saved Offline)',
-          'ඔබගේ හදිසි ආධාර ඉල්ලීම මෙම දුරකථනයේ සුරැකිණි.\n\nදුරකථන සංඥා (Signal) හෝ අන්තර්ජාලය ලැබුණු සැනින් ස්වයංක්‍රීයව සහන කණ්ඩායම් වෙත යොමු කෙරේ.',
+          'ඔබගේ ඉල්ලීම සහ ප්‍රමාණයන් මෙම දුරකථනයේ සුරැකිණි. අන්තර්ජාලය ලැබුණු පසු victim ගිණුමෙන් sign in වී ඉල්ලීම යවන්න. එවිට එහි තත්ත්වය සහ delivery code එක බැලිය හැක.',
           [{ text: 'හරි (OK)' }]
         );
       }
@@ -233,6 +211,7 @@ export default function OfflineSosScreen() {
       setDisasterType(null);
       setOtherDisaster('');
       setSelectedNeeds([]);
+      setQuantities({});
       setOtherNeed('');
       setContactInfo('');
       setDescription('');
@@ -345,8 +324,8 @@ export default function OfflineSosScreen() {
                 </Text>
                 <Text style={styles.queueBannerSub}>
                   {isOnline
-                    ? 'සංඥා ලැබී ඇත. දැන්ම සර්වර් වෙත යොමු කරන්න.'
-                    : 'සංඥා ලැබුණු සැනින් ස්වයංක්‍රීයව යවනු ලැබේ.'}
+                    ? 'Victim ගිණුමෙන් sign in වී Sync කරන්න.'
+                    : 'අන්තර්ජාලය ලැබුණු පසු victim ගිණුමෙන් sign in වී යවන්න.'}
                 </Text>
               </View>
             </View>
@@ -423,7 +402,7 @@ export default function OfflineSosScreen() {
               style={styles.otherInput}
               placeholder="ආපදාව කුමක්දැයි සඳහන් කරන්න..."
               placeholderTextColor="#9E9E9E"
-              value={otherDisaster}
+              value={otherDisaster} maxLength={100}
               onChangeText={setOtherDisaster}
             />
           )}
@@ -473,12 +452,18 @@ export default function OfflineSosScreen() {
             })}
           </View>
 
+          {selectedNeeds.map(id => <View key={`quantity-${id}`} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: 10 }}>
+            <Text style={{ flex: 1, color: '#fff' }}>{needsOptions.find(option => option.id === id)?.label} ({NEED_UNITS[id] || 'items'})</Text>
+            <TextInput accessibilityLabel={`Quantity for ${id}`} keyboardType="number-pad" maxLength={6}
+              value={quantities[id] || ''} onChangeText={value => setQuantities(q => ({ ...q, [id]: value }))}
+              style={{ width: 80, backgroundColor: '#fff', color: '#111', borderRadius: 8, padding: 12 }} placeholder="1" />
+          </View>)}
           {selectedNeeds.includes('other') && (
             <TextInput
               style={styles.otherInput}
               placeholder="අවශ්‍ය වෙනත් දේ මෙහි සඳහන් කරන්න..."
               placeholderTextColor="#9E9E9E"
-              value={otherNeed}
+              value={otherNeed} maxLength={60}
               onChangeText={setOtherNeed}
             />
           )}
@@ -517,7 +502,7 @@ export default function OfflineSosScreen() {
             placeholderTextColor="#9E9E9E"
             multiline
             numberOfLines={3}
-            value={description}
+            value={description} maxLength={5000}
             onChangeText={setDescription}
           />
         </View>
