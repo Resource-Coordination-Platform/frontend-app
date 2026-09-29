@@ -39,26 +39,9 @@ export default function VolunteerTabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="events"
-        options={{
-          title: 'Disasters',
-          tabBarLabel: 'Disasters',
-          tabBarIcon: ({ color, focused }) => (
-            <FontAwesome5 name="exclamation-triangle" size={focused ? 21 : 19} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="donate"
-        options={{
-          title: 'Donate',
-          tabBarLabel: 'Donate',
-          tabBarIcon: ({ color, focused }) => (
-            <FontAwesome5 name="hand-holding-heart" size={focused ? 22 : 20} color={color} />
-          ),
-        }}
-      />
+
+
+      <Tabs.Screen name="deliveries" options={{ title: 'Deliveries', tabBarIcon: ({ color }) => <FontAwesome5 name="truck" size={20} color={color} /> }} />
       <Tabs.Screen
         name="report_a_event"
         options={{
@@ -69,15 +52,16 @@ export default function VolunteerTabLayout() {
           ),
         }}
       />
-    <Tabs.Screen
-      name="live_crisis_map"
-      options={{
-        title: 'Map',
-        tabBarLabel: 'Live Map',
-        tabBarIcon: ({ color, focused }) => (
-          <FontAwesome5 name="map-marked-alt" size={focused ? 22 : 20} color={color} />
-        ),
-      }}
+
+      <Tabs.Screen
+        name="donations"
+        options={{
+          title: 'Donations',
+          tabBarLabel: 'Donations',
+          tabBarIcon: ({ color, focused }) => (
+            <FontAwesome5 name="hand-holding-heart" size={focused ? 22 : 20} color={color} />
+          ),
+        }}
       />
     </Tabs>
   );
