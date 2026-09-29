@@ -14,7 +14,8 @@ import {
 } from 'react-native';
 import axios from 'axios';
 import * as ImagePicker from 'expo-image-picker';
-import { FontAwesome5, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
+import { FontAwesome5, MaterialIcons, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -37,14 +38,47 @@ const SEVERITY_LEVELS = [
 
 export default function ReportEventScreen() {
   const [isLoading, setIsLoading] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
 
   // Form States
   const [category, setCategory] = useState('FLOOD');
   const [severity, setSeverity] = useState('HIGH');
-  const [district, setDistrict] = useState('');
-  const [city, setCity] = useState('');
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
   const [description, setDescription] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
+
+  // GPS location ගන්න function එක
+  const getGPSLocation = async () => {
+    setLocationLoading(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'අවසර අවශ්‍යයි',
+          'ස්ථානය ලබාගැනීමට Location permission එක ලබාදෙන්න.'
+        );
+        setLocationLoading(false);
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      setLatitude(location.coords.latitude);
+      setLongitude(location.coords.longitude);
+
+      Alert.alert(
+        'ස්ථානය ලැබුණි ✅',
+        `ඔබගේ GPS ස්ථානය සාර්ථකව ලබාගන්නා ලදී.\n\nLatitude: ${location.coords.latitude.toFixed(6)}\nLongitude: ${location.coords.longitude.toFixed(6)}`
+      );
+    } catch (error) {
+      Alert.alert('දෝෂයකි', 'GPS ස්ථානය ලබාගැනීමට නොහැකි විය. නැවත උත්සාහ කරන්න.');
+    } finally {
+      setLocationLoading(false);
+    }
+  };
 
   const pickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -65,9 +99,15 @@ export default function ReportEventScreen() {
     }
   };
 
+  // Location සහ image දෙකම ලැබුණාම විතරයි submit button enable වෙන්නේ
+  const canSubmit = latitude !== null && longitude !== null && imageUri !== null;
+
   const submitReport = async () => {
-    if (!district.trim() || !city.trim()) {
-      Alert.alert('අඩුපාඩුයි', 'කරුණාකර දිස්ත්‍රික්කය සහ නගරය ඇතුළත් කරන්න.');
+    if (!canSubmit) {
+      Alert.alert(
+        'අඩුපාඩුයි',
+        'කරුණාකර GPS ස්ථානය සහ ඡායාරූපයක් එක් කරන්න. දෙකම අනිවාර්යයි.'
+      );
       return;
     }
 
@@ -75,16 +115,13 @@ export default function ReportEventScreen() {
     let uploadedImageUrl = null;
 
     try {
-      // 1. Upload image to Supabase if present
+      // 1. Upload image to Supabase
       if (imageUri) {
         const fileName = `report_${Date.now()}.jpg`;
-        const formData = new FormData();
 
-        formData.append('file', {
-          uri: imageUri,
-          name: fileName,
-          type: 'image/jpeg',
-        } as any);
+        // Read the local image file as a blob
+        const fileResponse = await fetch(imageUri);
+        const blob = await fileResponse.blob();
 
         const uploadRes = await fetch(
           `${SUPABASE_URL}/storage/v1/object/volunteer_reports/${fileName}`,
@@ -93,9 +130,10 @@ export default function ReportEventScreen() {
             headers: {
               Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
               apikey: SUPABASE_ANON_KEY || '',
-              'Content-Type': 'multipart/form-data',
+              'Content-Type': 'image/jpeg',
+              'x-upsert': 'true',
             },
-            body: formData,
+            body: blob,
           }
         );
 
@@ -107,23 +145,23 @@ export default function ReportEventScreen() {
         }
       }
 
-      // 2. Send report to backend
+      // 2. Send report to backend (latitude/longitude යවනවා district/city වෙනුවට)
       const payload = {
         category: category,
         severity: severity,
-        district: district.trim(),
-        city: city.trim(),
+        latitude: latitude,
+        longitude: longitude,
         description: description.trim() || 'No description provided.',
         image_url: uploadedImageUrl,
       };
 
       await api.post('/volunteer/reports', payload);
 
-      Alert.alert('Success!', 'ඔබේ වාර්තාව සාර්ථකව යොමු කළා. සහන කණ්ඩායම් මෙය ඉක්මනින් පරීක්ෂා කරාවි! 🏆');
+      Alert.alert('Success!', 'ඔබේ වාර්තාව සාර්ථකව යොමු කළා. ආසන්නතම සහන මධ්‍යස්ථානයට ස්වයංක්‍රීයව යොමු කරා! 🏆');
 
       // Clear the form
-      setDistrict('');
-      setCity('');
+      setLatitude(null);
+      setLongitude(null);
       setDescription('');
       setImageUri(null);
     } catch (error: any) {
@@ -144,9 +182,6 @@ export default function ReportEventScreen() {
           <View style={styles.headerTopRow}>
             <View>
               <Text style={styles.headerTitle}> ආපදාවක් වාර්තා කරන්න</Text>
-              <Text style={styles.headerSubtitle}>
-                ඔබ දුටු හෝ දැනුවත් වූ ආපදා තොරතුරු කඩිනමින් යොමු කරන්න
-              </Text>
             </View>
             <View style={styles.headerIconCircle}>
               <MaterialIcons name="add-alert" size={20} color="#80CBC4" />
@@ -223,30 +258,65 @@ export default function ReportEventScreen() {
               })}
             </View>
 
-            {/* Location Inputs */}
-            <Text style={styles.sectionLabel}>දිස්ත්‍රික්කය (District) *</Text>
-            <View style={styles.inputWrapper}>
-              <MaterialIcons name="location-city" size={20} color="#64748B" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                value={district}
-                onChangeText={setDistrict}
-                placeholder="උදා: Galle, Kalutara, Ratnapura"
-                placeholderTextColor="#94A3B8"
-              />
-            </View>
+            {/* GPS Location Button */}
+            <Text style={styles.sectionLabel}>ස්ථානය (Location) *</Text>
+            <Text style={styles.locationHint}>
+              සිද්ධිය සිදුවන ආසන්නතම ප්‍රදේශයකින් ඔබේ ස්ථානය ලබා දෙන්න
+            </Text>
 
-            <Text style={styles.sectionLabel}>ආසන්න නගරය (City) *</Text>
-            <View style={styles.inputWrapper}>
-              <MaterialIcons name="map" size={20} color="#64748B" style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                value={city}
-                onChangeText={setCity}
-                placeholder="උදා: Baddegama, Horana"
-                placeholderTextColor="#94A3B8"
-              />
-            </View>
+            {latitude !== null && longitude !== null ? (
+              <View style={styles.locationSuccessBox}>
+                <View style={styles.locationSuccessHeader}>
+                  <View style={styles.locationCheckCircle}>
+                    <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.locationSuccessTitle}>ස්ථානය ලබා ගැනුණි ✅</Text>
+                </View>
+                <View style={styles.coordsRow}>
+                  <View style={styles.coordItem}>
+                    <Text style={styles.coordLabel}>Latitude</Text>
+                    <Text style={styles.coordValue}>{latitude.toFixed(6)}</Text>
+                  </View>
+                  <View style={styles.coordItem}>
+                    <Text style={styles.coordLabel}>Longitude</Text>
+                    <Text style={styles.coordValue}>{longitude.toFixed(6)}</Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  style={styles.relocateBtn}
+                  onPress={getGPSLocation}
+                  activeOpacity={0.8}
+                >
+                  <MaterialIcons name="my-location" size={14} color="#00897B" />
+                  <Text style={styles.relocateBtnText}>නැවත ස්ථානය ලබාගන්න</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.locationBtn}
+                onPress={getGPSLocation}
+                activeOpacity={0.85}
+                disabled={locationLoading}
+              >
+                {locationLoading ? (
+                  <ActivityIndicator color="#00897B" size="small" />
+                ) : (
+                  <>
+                    <View style={styles.locationIconCircle}>
+                      <MaterialIcons name="my-location" size={22} color="#00897B" />
+                    </View>
+                    <View>
+                      <Text style={styles.locationBtnTitle}>
+                        ස්ථානය ලබාදෙන්න
+                      </Text>
+                      <Text style={styles.locationBtnSub}>
+                        GPS මඟින් ඔබේ ස්ථානය ස්වයංක්‍රීයව ලබා ගැනේ
+                      </Text>
+                    </View>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
 
             {/* Description Input */}
             <Text style={styles.sectionLabel}>විස්තරය (Description)</Text>
@@ -262,8 +332,8 @@ export default function ReportEventScreen() {
               />
             </View>
 
-            {/* Image Attachment Box */}
-            <Text style={styles.sectionLabel}>ඡායාරූපයක් එක් කරන්න (Optional)</Text>
+            {/* Image Attachment Box (අනිවාර්යයි) */}
+            <Text style={styles.sectionLabel}>ඡායාරූපයක් එක් කරන්න (Required) *</Text>
             {imageUri ? (
               <View style={styles.imagePreviewContainer}>
                 <Image source={{ uri: imageUri }} style={styles.imagePreview} />
@@ -289,11 +359,28 @@ export default function ReportEventScreen() {
               </TouchableOpacity>
             )}
 
+            {/* Readiness Indicator */}
+            {!canSubmit && (
+              <View style={styles.readinessBox}>
+                <MaterialIcons name="info-outline" size={16} color="#D97706" />
+                <Text style={styles.readinessText}>
+                  {latitude === null && imageUri === null
+                    ? 'GPS ස්ථානය සහ ඡායාරූපය අනිවාර්යයි'
+                    : latitude === null
+                    ? 'GPS ස්ථානය ලබාදිය යුතුයි'
+                    : 'ඡායාරූපයක් එක් කළ යුතුයි'}
+                </Text>
+              </View>
+            )}
+
             {/* Submit Button */}
             <TouchableOpacity
-              style={[styles.submitBtn, isLoading && { opacity: 0.7 }]}
+              style={[
+                styles.submitBtn,
+                (!canSubmit || isLoading) && styles.submitBtnDisabled,
+              ]}
               onPress={submitReport}
-              disabled={isLoading}
+              disabled={!canSubmit || isLoading}
               activeOpacity={0.85}
             >
               {isLoading ? (
@@ -431,6 +518,105 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 
+  /* --- GPS Location Button --- */
+  locationHint: {
+    fontSize: 11,
+    color: '#64748B',
+    marginBottom: 8,
+    lineHeight: 16,
+  },
+  locationBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1.5,
+    borderColor: '#B2DFDB',
+    borderStyle: 'dashed',
+    borderRadius: 14,
+    padding: 16,
+    gap: 12,
+  },
+  locationIconCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#E0F2F1',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  locationBtnTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#00897B',
+  },
+  locationBtnSub: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+
+  /* --- Location Success --- */
+  locationSuccessBox: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+    borderRadius: 14,
+    padding: 14,
+  },
+  locationSuccessHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  locationCheckCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#059669',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  locationSuccessTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#065F46',
+  },
+  coordsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 10,
+  },
+  coordItem: {
+    flex: 1,
+    backgroundColor: '#D1FAE5',
+    borderRadius: 8,
+    padding: 8,
+  },
+  coordLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#047857',
+    marginBottom: 2,
+  },
+  coordValue: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#065F46',
+  },
+  relocateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 6,
+  },
+  relocateBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#00897B',
+  },
+
   /* --- Inputs --- */
   inputWrapper: {
     flexDirection: 'row',
@@ -502,6 +688,25 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
 
+  /* --- Readiness Indicator --- */
+  readinessBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FEF3C7',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 14,
+  },
+  readinessText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#B45309',
+  },
+
   /* --- Submit Button --- */
   submitBtn: {
     flexDirection: 'row',
@@ -516,6 +721,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
+  },
+  submitBtnDisabled: {
+    backgroundColor: '#94A3B8',
+    elevation: 0,
+    shadowOpacity: 0,
   },
   submitBtnText: {
     color: '#FFFFFF',
