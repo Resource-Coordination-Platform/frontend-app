@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useRef, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,10 +14,13 @@ import {
   SafeAreaView,
   ScrollView,
   Platform,
+  AppState,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { FontAwesome5, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { api, clearAuthTokens } from '../../services/api';
+import { useDeliveries } from '../../services/deliveries';
+import { DirectionsButton } from '../../components/directions-button';
 
 const SRI_LANKAN_SKILLS = [
   { value: 'first_aid', label: 'First Aid', icon: 'medkit' },
@@ -34,10 +37,50 @@ const SRI_LANKAN_SKILLS = [
 
 export default function VolunteerDashboard() {
   const router = useRouter();
+  const goodsDeliveries = useDeliveries();
   const [profile, setProfile] = useState<any>(null);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const fetching = useRef(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Completed assignments collapse state
+  const [expandedAssignments, setExpandedAssignments] = useState<Record<string, boolean>>({});
+
+  const toggleExpandAssignment = (id: string) => {
+    setExpandedAssignments(prev => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
+
+  // Sort assignments:
+  // 1. In-progress / Doing right now (thaman dn karamin inna ewa udatama)
+  // 2. Newly notified / waiting for volunteer action (aluthma ewa udata)
+  // 3. Successfully completed (sarthakawa awasan karapu ewa yatata)
+  const sortedAssignments = useMemo(() => {
+    const getStatusWeight = (status: string) => {
+      if (status === 'EN_ROUTE') return 1;
+      if (status === 'ACCEPTED') return 2;
+      if (status === 'NOTIFIED') return 3;
+      if (status === 'COMPLETED') return 4;
+      return 5;
+    };
+
+    return [...assignments].sort((a, b) => {
+      const weightA = getStatusWeight(a.status);
+      const weightB = getStatusWeight(b.status);
+
+      if (weightA !== weightB) {
+        return weightA - weightB;
+      }
+
+      const dateA = new Date(a.updated_at || a.assigned_at || a.created_at || 0).getTime();
+      const dateB = new Date(b.updated_at || b.assigned_at || b.created_at || 0).getTime();
+      return dateB - dateA;
+    });
+  }, [assignments]);
 
   // Edit Profile States
   const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
@@ -46,11 +89,9 @@ export default function VolunteerDashboard() {
   const [editSkills, setEditSkills] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async (silent = false) => {
+    if (fetching.current) return;
+    fetching.current = true;
     try {
       let currentProfile = null;
 
@@ -59,7 +100,7 @@ export default function VolunteerDashboard() {
         currentProfile = profileRes.data;
         setProfile(currentProfile);
 
-        if (!currentProfile.base_district) {
+        if (!currentProfile.base_district && !silent) {
           Alert.alert(
             'සාදරයෙන් පිළිගනිමු!',
             'මෙහෙයුම් ලබා ගැනීමට පෙර කරුණාකර ඔබගේ ගිණුමේ විස්තර සම්පූර්ණ කරන්න.'
@@ -69,6 +110,7 @@ export default function VolunteerDashboard() {
         }
       } catch (err: any) {
         if (err.response?.status === 404) {
+          if (silent) return;
           Alert.alert('Processing', 'ඔබේ ගිණුම සකසමින් පවතී. කරුණාකර ටිකකින් Refresh කරන්න.');
           return;
         } else {
@@ -76,9 +118,10 @@ export default function VolunteerDashboard() {
         }
       }
 
-      if (currentProfile && currentProfile.base_district) {
-        const assignmentsRes = await api.get('/volunteer/assignments');
+      if (currentProfile) {
+        const assignmentsRes = await api.post('/volunteer/assignments/sync', {});
         setAssignments(assignmentsRes.data);
+        setLoadError(null);
       }
     } catch (error: any) {
       if (error.response?.status === 401) {
@@ -87,13 +130,30 @@ export default function VolunteerDashboard() {
         router.replace('/welcome');
       } else {
         console.error(error);
+        setLoadError('Unable to refresh assignments. Retrying automatically.');
+        if (silent) return;
         Alert.alert('Error', 'දත්ත ලබාගැනීමේදී දෝෂයක් ඇතිවිය.');
       }
     } finally {
+      fetching.current = false;
       setIsLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [router]);
+
+  useFocusEffect(useCallback(() => {
+    void fetchDashboardData();
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active') void fetchDashboardData(true);
+    }, 5000);
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') void fetchDashboardData(true);
+    });
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [fetchDashboardData]));
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -112,6 +172,7 @@ export default function VolunteerDashboard() {
     try {
       await api.patch('/volunteer/profiles/me/availability', { available_status: value });
       setProfile({ ...profile, available_status: value });
+      await fetchDashboardData(true);
     } catch (error: any) {
       if (error.response?.status === 422) {
         Alert.alert('අවධානයයි!', 'Active වීමට පෙර ඔබගේ ප්‍රදේශය (Base District) තෝරා Save කරන්න.');
@@ -128,6 +189,7 @@ export default function VolunteerDashboard() {
       fetchDashboardData();
     } catch (error: any) {
       if (error.response?.status === 409) {
+        void fetchDashboardData(true);
         Alert.alert(
           'Too Late',
           'කණගාටුයි, මෙම කාර්යය දැනටමත් වෙනත් ස්වේච්ඡා සේවකයෙකු විසින් භාරගෙන ඇත.'
@@ -261,10 +323,58 @@ export default function VolunteerDashboard() {
   };
 
   const renderAssignmentItem = ({ item }: { item: any }) => {
+    const isCompleted = item.status === 'COMPLETED';
+    const isExpanded = !!expandedAssignments[item.id];
     const badge = getStatusBadge(item.status);
+
+    // Collapsed Card View for Completed Assignment
+    if (isCompleted && !isExpanded) {
+      return (
+        <TouchableOpacity
+          style={styles.completedCollapsedCard}
+          onPress={() => toggleExpandAssignment(item.id)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.completedCollapsedLeft}>
+            <View style={styles.completedIconCircle}>
+              <FontAwesome5 name="check-circle" size={20} color="#059669" />
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <View style={styles.completedHeaderRow}>
+                <Text style={styles.completedTitle} numberOfLines={1}>
+                  {item.event?.title || 'Volunteer assignment'}
+                </Text>
+                <View style={styles.completedPillBadge}>
+                  <Text style={styles.completedPillText}>අවසන් කළා ✓</Text>
+                </View>
+              </View>
+              <Text style={styles.completedSub} numberOfLines={1}>
+                {item.event?.source_district || 'District'} · {item.requirement?.skill?.replace(/_/g, ' ') || 'General'}
+              </Text>
+              <Text style={styles.completedTapHint}>
+                (Tap to view details)
+              </Text>
+            </View>
+          </View>
+          <MaterialCommunityIcons name="chevron-down" size={24} color="#64748B" />
+        </TouchableOpacity>
+      );
+    }
 
     return (
       <View style={styles.assignmentCard}>
+        {/* Toggle Bar for Expanded Completed Assignment */}
+        {isCompleted && (
+          <TouchableOpacity
+            style={styles.collapseToggleBar}
+            onPress={() => toggleExpandAssignment(item.id)}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons name="chevron-up" size={18} color="#059669" />
+            <Text style={styles.collapseToggleText}> (Tap to collapse)</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Top row with status badge */}
         <View style={styles.cardHeader}>
           <View style={styles.missionIdPill}>
@@ -279,7 +389,19 @@ export default function VolunteerDashboard() {
 
         <View style={styles.cardDivider} />
 
+        <Text style={styles.sectionTitle}>{item.event?.title || 'Volunteer assignment'}</Text>
+        <Text style={styles.statusHeroSub}>
+          {item.event?.source_district} · {item.requirement?.skill?.replace(/_/g, ' ')}
+        </Text>
+        {!!item.event?.description && <Text style={styles.statusHeroSub}>{item.event.description}</Text>}
+        <View style={styles.cardDivider} />
+
         {/* Status Actions */}
+        <DirectionsButton
+          latitude={item.event?.latitude}
+          longitude={item.event?.longitude}
+          destination={item.event?.title}
+        />
         {item.status === 'NOTIFIED' && (
           <View style={styles.actionRow}>
             <TouchableOpacity
@@ -349,6 +471,12 @@ export default function VolunteerDashboard() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
+        {goodsDeliveries.data.some(d => d.status !== 'COMPLETED') && (
+          <TouchableOpacity onPress={() => router.push('/(volunteer)/deliveries')} style={{ padding: 14, backgroundColor: '#CCFBF1' }}>
+            <Text style={{ color: '#115E59', fontWeight: '800' }}>📦 භාණ්ඩ බෙදාහැරීම්: {goodsDeliveries.data.filter(d => d.status === 'OPEN').length} නව invitations — බලන්න →</Text>
+          </TouchableOpacity>
+        )}
+        {loadError && <Text accessibilityRole="alert" style={styles.statusHeroSub}>{loadError}</Text>}
         {/* --- Header Section (Dark Teal/Slate themed) --- */}
         <View style={styles.header}>
           <View style={styles.headerTopRow}>
@@ -383,7 +511,7 @@ export default function VolunteerDashboard() {
         </View>
 
         <FlatList
-          data={assignments}
+          data={sortedAssignments}
           keyExtractor={item => item.id}
           renderItem={renderAssignmentItem}
           contentContainerStyle={styles.listContent}
@@ -412,11 +540,7 @@ export default function VolunteerDashboard() {
                     <Text style={[styles.statusHeroTitle, { color: isAvailable ? '#065F46' : '#334155' }]}>
                       {isAvailable ? '🟢 සක්‍රීයයි (Active & Ready)' : '⚪ අක්‍රීයයි (Offline)'}
                     </Text>
-                    <Text style={styles.statusHeroSub}>
-                      {isAvailable
-                        ? 'ඔබ ආසන්නයේ සිදුවන ආපදා මෙහෙයුම් ඔබට ලැබෙනු ඇත.'
-                        : 'නව මෙහෙයුම් ලබා ගැනීමට Switch එක On කරන්න.'}
-                    </Text>
+                    
                   </View>
                   <Switch
                     value={isAvailable}
@@ -463,7 +587,9 @@ export default function VolunteerDashboard() {
               </View>
               <Text style={styles.emptyTitle}>දැනට නව මෙහෙයුම් නොමැත</Text>
               <Text style={styles.emptySub}>
-                ඔබගේ ප්‍රදේශයේ නව ආපදාවක් වාර්තා වූ වහාම මෙහි දිස්වනු ඇත.
+                {!isAvailable
+                  ? 'Turn on availability to receive matching assignments.'
+                  : 'Assignments appear when your skills and district match an open event. This list refreshes automatically.'}
               </Text>
             </View>
           }
@@ -897,6 +1023,92 @@ const styles = StyleSheet.create({
     color: '#047857',
     fontWeight: '800',
     fontSize: 13,
+  },
+  completedCollapsedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+  completedCollapsedLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  completedIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#D1FAE5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  completedHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  completedTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+    flex: 1,
+  },
+  completedPillBadge: {
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#6EE7B7',
+  },
+  completedPillText: {
+    color: '#047857',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  completedSub: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  completedTapHint: {
+    fontSize: 10,
+    color: '#00897B',
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  collapseToggleBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#F0FDF4',
+    paddingVertical: 8,
+    marginHorizontal: -16,
+    marginTop: -16,
+    marginBottom: 12,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#BBF7D0',
+  },
+  collapseToggleText: {
+    color: '#15803D',
+    fontSize: 12,
+    fontWeight: '700',
   },
 
   /* --- Empty State --- */
