@@ -6,16 +6,15 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
-  SafeAreaView,
   RefreshControl,
-  StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { DeliveryCard } from '../../components/delivery-card';
-import { useDeliveries } from '../../services/deliveries';
+import { useVolunteerTabs } from '../../services/volunteer-tabs';
 
 export default function DeliveriesScreen() {
-  const { data, loading, error, refresh } = useDeliveries();
+  const { deliveries: { data, loading, error, refresh } } = useVolunteerTabs();
   const openCount = data.filter(d => d.status === 'OPEN').length;
   const activeCount = data.filter(d => ['ACCEPTED', 'COLLECTED', 'EN_ROUTE', 'CODE_VERIFIED'].includes(d.status)).length;
   const completedCount = data.filter(d => d.status === 'COMPLETED').length;
@@ -48,18 +47,12 @@ export default function DeliveriesScreen() {
   }, [data]);
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <StatusBar barStyle="light-content" backgroundColor="#083D35" />
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
+      <View style={styles.screen}>
 
       {/* --- Header --- */}
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title}>භාණ්ඩ බෙදාහැරීම්</Text>
-          </View>
-          <View style={styles.headerIconCircle}>
-            <MaterialCommunityIcons name="truck-delivery" size={24} color="#80CBC4" />
-          </View>
         </View>
 
         {/* Status Counts */}
@@ -120,11 +113,16 @@ export default function DeliveriesScreen() {
           }
         />
       )}
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#083D35',
+  },
   screen: {
     flex: 1,
     backgroundColor: '#F1F5F9',
@@ -167,10 +165,12 @@ const styles = StyleSheet.create({
   },
   statsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
     marginTop: 12,
   },
   statBadge: {
+    maxWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
@@ -180,6 +180,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   statText: {
+    flexShrink: 1,
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',

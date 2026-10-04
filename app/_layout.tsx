@@ -2,12 +2,15 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-naviga
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
+import { useEffect } from 'react';
+import { startOfflineSync } from '../services/background-sync';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 
 
 export default function RootLayout() {
+  useEffect(startOfflineSync, []);
   const colorScheme = useColorScheme();
 
   return (

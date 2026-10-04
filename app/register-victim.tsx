@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
+import { savePendingRegistration } from '../services/offline-registration';
+import { registerBackgroundSync } from '../services/background-sync';
 import * as Location from 'expo-location';
 import NetInfo from '@react-native-community/netinfo';
 import axios from 'axios';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { saveAuthTokens } from '../services/api';
+import { validateEmail, validatePassword, validateFullName, validatePhone, formatAuthError, EMAIL_REGEX } from '../utils/validation';
 
 export default function RegisterVictim() {
   const router = useRouter();
@@ -15,15 +17,88 @@ export default function RegisterVictim() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const navigateToOfflineSos = () => {
-    router.push('/offline-sos');
+  // Field error messages
+  const [nameError, setNameError] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  // Touched states for live feedback after user interacts
+  const [nameTouched, setNameTouched] = useState(false);
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [phoneTouched, setPhoneTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+
+  const navigateToOfflineSos = async () => {
+    try {
+      await savePendingRegistration({
+        email: email.trim().toLowerCase(), password,
+        full_name: fullName.trim(), phone: phone.trim() || undefined,
+      });
+      await registerBackgroundSync().catch(() => undefined);
+      router.push('/offline-sos');
+    } catch (error) {
+      Alert.alert('Could not save registration', error instanceof Error ? error.message : 'Please retry.');
+    }
+  };
+
+  const handleNameChange = (text: string) => {
+    setFullName(text);
+    if (nameTouched) {
+      const res = validateFullName(text);
+      setNameError(res.isValid ? '' : (res.error || ''));
+    }
+  };
+
+  const handleEmailChange = (text: string) => {
+    setEmail(text);
+    if (emailTouched) {
+      const res = validateEmail(text);
+      setEmailError(res.isValid ? '' : (res.error || ''));
+    }
+  };
+
+  const handlePhoneChange = (text: string) => {
+    setPhone(text);
+    if (phoneTouched) {
+      const res = validatePhone(text);
+      setPhoneError(res.isValid ? '' : (res.error || ''));
+    }
+  };
+
+  const handlePasswordChange = (text: string) => {
+    setPassword(text);
+    if (passwordTouched) {
+      const res = validatePassword(text);
+      setPasswordError(res.isValid ? '' : (res.error || ''));
+    }
   };
 
   const handleRegister = async () => {
-    if (!fullName || !email || !password) {
-      Alert.alert('Error', 'කරුණාකර සියලුම තොරතුරු ඇතුලත් කරන්න.');
+    // Mark all as touched
+    setNameTouched(true);
+    setEmailTouched(true);
+    setPhoneTouched(true);
+    setPasswordTouched(true);
+
+    const nameRes = validateFullName(fullName);
+    setNameError(nameRes.isValid ? '' : (nameRes.error || ''));
+
+    const emailRes = validateEmail(email);
+    setEmailError(emailRes.isValid ? '' : (emailRes.error || ''));
+
+    const phoneRes = validatePhone(phone);
+    setPhoneError(phoneRes.isValid ? '' : (phoneRes.error || ''));
+
+    const passRes = validatePassword(password);
+    setPasswordError(passRes.isValid ? '' : (passRes.error || ''));
+
+    if (!nameRes.isValid || !emailRes.isValid || !phoneRes.isValid || !passRes.isValid) {
+      const firstError = nameRes.error || emailRes.error || phoneRes.error || passRes.error;
+      Alert.alert('අවධානයට (Invalid Input)', firstError);
       return;
     }
 
@@ -45,7 +120,7 @@ export default function RegisterVictim() {
             {
               text: 'Offline SOS වෙත යන්න',
               style: 'default',
-              onPress: navigateToOfflineSos //router.push(offline.sos)
+              onPress: navigateToOfflineSos
             }
           ]
         );
@@ -63,11 +138,24 @@ export default function RegisterVictim() {
       const lat = location.coords.latitude;
       const lng = location.coords.longitude;
 
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanName = fullName.trim();
+      const cleanPhone = phone.trim();
+
       await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/auth/register`, {
-        email: email, password: password, full_name: fullName, phone: phone, user_type: 'VICTIM', latitude: lat, longitude: lng
+        email: cleanEmail,
+        password: password,
+        full_name: cleanName,
+        phone: cleanPhone || undefined,
+        user_type: 'VICTIM',
+        latitude: lat,
+        longitude: lng
       });
 
-      const loginResponse = await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/auth/login`, { email: email, password: password });
+      const loginResponse = await axios.post(`${process.env.EXPO_PUBLIC_BACKEND_URL}/auth/login`, {
+        email: cleanEmail,
+        password: password
+      });
       const { access_token, refresh_token, tenant_id } = loginResponse.data;
 
       await saveAuthTokens({
@@ -80,7 +168,7 @@ export default function RegisterVictim() {
       router.replace('/victim');
 
     } catch (error: any) {
-      console.error(error);
+      console.warn('Victim registration failed:', error?.response?.status || error?.code);
       const isNetworkErr = !error.response || error.code === 'ERR_NETWORK' || error.message?.toLowerCase().includes('network');
       
       if (isNetworkErr) {
@@ -96,13 +184,15 @@ export default function RegisterVictim() {
           ]
         );
       } else {
-        const errorMsg = error.response?.data?.detail || 'Registration failed. කරුණාකර නැවත උත්සහ කරන්න.';
-        Alert.alert('Error', errorMsg);
+        const errorMsg = formatAuthError(error);
+        Alert.alert('දෝෂයකි (Error)', errorMsg);
       }
     } finally {
       setIsLoading(false);
     }
   };
+
+  const isEmailValidFormat = EMAIL_REGEX.test(email.trim());
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -118,25 +208,123 @@ export default function RegisterVictim() {
           </View>
 
           <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <MaterialIcons name="person" size={20} color="#6B7280" style={styles.inputIcon} />
-              <TextInput style={styles.input} placeholder="සම්පූර්ණ නම" value={fullName} onChangeText={setFullName} placeholderTextColor="#9CA3AF" />
+            {/* Full Name */}
+            <View style={[
+              styles.inputContainer,
+              nameError ? styles.inputContainerError : (nameTouched && fullName.trim().length >= 2 ? styles.inputContainerSuccess : null)
+            ]}>
+              <MaterialIcons name="person" size={20} color={nameError ? '#EF4444' : '#6B7280'} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="සම්පූර්ණ නම (Full Name)"
+                value={fullName}
+                onChangeText={handleNameChange}
+                onBlur={() => {
+                  setNameTouched(true);
+                  const res = validateFullName(fullName);
+                  setNameError(res.isValid ? '' : (res.error || ''));
+                }}
+                placeholderTextColor="#9CA3AF"
+              />
+              {nameTouched && fullName.trim().length >= 2 && !nameError && (
+                <MaterialIcons name="check-circle" size={18} color="#10B981" />
+              )}
             </View>
+            {nameError ? <Text style={styles.errorText}>{nameError}</Text> : null}
 
-            <View style={styles.inputContainer}>
-              <MaterialIcons name="email" size={20} color="#6B7280" style={styles.inputIcon} />
-              <TextInput style={styles.input} placeholder="ඊමේල් (Email)" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" placeholderTextColor="#9CA3AF" />
+            {/* Email (Gmail) */}
+            <View style={[
+              styles.inputContainer,
+              emailError ? styles.inputContainerError : (isEmailValidFormat ? styles.inputContainerSuccess : null)
+            ]}>
+              <MaterialIcons name="email" size={20} color={emailError ? '#EF4444' : '#6B7280'} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="ඊමේල් (Email / Gmail)"
+                value={email}
+                onChangeText={handleEmailChange}
+                onBlur={() => {
+                  setEmailTouched(true);
+                  const res = validateEmail(email);
+                  setEmailError(res.isValid ? '' : (res.error || ''));
+                }}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                placeholderTextColor="#9CA3AF"
+              />
+              {isEmailValidFormat && (
+                <MaterialIcons name="check-circle" size={18} color="#10B981" />
+              )}
+              {emailError ? (
+                <MaterialIcons name="error-outline" size={18} color="#EF4444" />
+              ) : null}
             </View>
+            {emailError ? (
+              <Text style={styles.errorText}>{emailError}</Text>
+            ) : (
+              email.length > 0 && !isEmailValidFormat ? (
+                <Text style={styles.hintText}>උදා: yourname@gmail.com</Text>
+              ) : null
+            )}
 
-            <View style={styles.inputContainer}>
-              <MaterialIcons name="phone" size={20} color="#6B7280" style={styles.inputIcon} />
-              <TextInput style={styles.input} placeholder="දුරකථන අංකය" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholderTextColor="#9CA3AF" />
+            {/* Phone */}
+            <View style={[
+              styles.inputContainer,
+              phoneError ? styles.inputContainerError : null
+            ]}>
+              <MaterialIcons name="phone" size={20} color={phoneError ? '#EF4444' : '#6B7280'} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="දුරකථන අංකය (07XXXXXXXX)"
+                value={phone}
+                onChangeText={handlePhoneChange}
+                onBlur={() => {
+                  setPhoneTouched(true);
+                  const res = validatePhone(phone);
+                  setPhoneError(res.isValid ? '' : (res.error || ''));
+                }}
+                keyboardType="phone-pad"
+                placeholderTextColor="#9CA3AF"
+              />
             </View>
+            {phoneError ? <Text style={styles.errorText}>{phoneError}</Text> : null}
 
-            <View style={styles.inputContainer}>
-              <MaterialIcons name="lock" size={20} color="#6B7280" style={styles.inputIcon} />
-              <TextInput style={styles.input} placeholder="මුරපදය (Password)" value={password} onChangeText={setPassword} secureTextEntry placeholderTextColor="#9CA3AF" />
+            {/* Password */}
+            <View style={[
+              styles.inputContainer,
+              passwordError ? styles.inputContainerError : (password.length >= 10 ? styles.inputContainerSuccess : null)
+            ]}>
+              <MaterialIcons name="lock" size={20} color={passwordError ? '#EF4444' : '#6B7280'} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="මුරපදය (අවම අක්ෂර 10ක්)"
+                value={password}
+                onChangeText={handlePasswordChange}
+                onBlur={() => {
+                  setPasswordTouched(true);
+                  const res = validatePassword(password);
+                  setPasswordError(res.isValid ? '' : (res.error || ''));
+                }}
+                secureTextEntry={!showPassword}
+                placeholderTextColor="#9CA3AF"
+              />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <MaterialIcons
+                  name={showPassword ? 'visibility' : 'visibility-off'}
+                  size={20}
+                  color="#6B7280"
+                />
+              </TouchableOpacity>
             </View>
+            {passwordError ? (
+              <Text style={styles.errorText}>{passwordError}</Text>
+            ) : (
+              password.length > 0 ? (
+                <Text style={[styles.hintText, password.length >= 10 ? { color: '#10B981' } : { color: '#F59E0B' }]}>
+                  {password.length >= 10 ? `✓ මුරපදය ප්‍රමාණවත්ය (${password.length} අක්ෂර)` : `අවම අක්ෂර 10ක් අවශ්‍යයි (${password.length}/10)`}
+                </Text>
+              ) : null
+            )}
 
             {isLoading ? (
               <View style={{ alignItems: 'center', marginTop: 15 }}>
@@ -168,32 +356,15 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: '900', color: '#1F2937', marginBottom: 5 },
   subtitle: { fontSize: 14, color: '#6B7280' },
   form: { backgroundColor: '#fff', padding: 20, borderRadius: 20, elevation: 3 },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, marginBottom: 15, paddingHorizontal: 15 },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 12, marginBottom: 14, paddingHorizontal: 15 },
+  inputContainerError: { borderColor: '#EF4444', backgroundColor: '#FEF2F2' },
+  inputContainerSuccess: { borderColor: '#10B981' },
   inputIcon: { marginRight: 10 },
-  input: { flex: 1, paddingVertical: 15, fontSize: 16, color: '#1F2937' },
+  input: { flex: 1, paddingVertical: 14, fontSize: 15, color: '#1F2937' },
+  errorText: { color: '#EF4444', fontSize: 12, marginTop: -10, marginBottom: 12, marginLeft: 4, fontWeight: '500' },
+  hintText: { fontSize: 12, color: '#6B7280', marginTop: -10, marginBottom: 12, marginLeft: 4 },
   button: { backgroundColor: '#E53935', paddingVertical: 15, borderRadius: 12, alignItems: 'center', marginTop: 10, elevation: 2 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  offlineBannerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF5F5',
-    borderWidth: 1.5,
-    borderColor: '#FFCDD2',
-    borderRadius: 14,
-    padding: 14,
-    marginTop: 20,
-    elevation: 1,
-  },
-  offlineBannerTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#D32F2F',
-  },
-  offlineBannerSub: {
-    fontSize: 12,
-    color: '#E53935',
-    marginTop: 2,
-  },
   backBtn: { marginTop: 15, alignItems: 'center' },
   backBtnText: { color: '#6B7280', fontSize: 15, fontWeight: '600' }
 });

@@ -202,7 +202,7 @@ export default function OfflineSosScreen() {
       } else {
         Alert.alert(
           '💾 නොබැඳිව සුරැකිණි (Saved Offline)',
-          'ඔබගේ ඉල්ලීම සහ ප්‍රමාණයන් මෙම දුරකථනයේ සුරැකිණි. අන්තර්ජාලය ලැබුණු පසු victim ගිණුමෙන් sign in වී ඉල්ලීම යවන්න. එවිට එහි තත්ත්වය සහ delivery code එක බැලිය හැක.',
+          'ඔබගේ ඉල්ලීම සුරැකිණි. ලියාපදිංචි තොරතුරු සුරැකී ඇත්නම් අන්තර්ජාලය ලැබුණු පසු ගිණුම සාදා ඉල්ලීම ස්වයංක්‍රීයව යවනු ලැබේ. පසුව එම email සහ password භාවිතයෙන් පිවිසිය හැක.',
           [{ text: 'හරි (OK)' }]
         );
       }
@@ -324,8 +324,8 @@ export default function OfflineSosScreen() {
                 </Text>
                 <Text style={styles.queueBannerSub}>
                   {isOnline
-                    ? 'Victim ගිණුමෙන් sign in වී Sync කරන්න.'
-                    : 'අන්තර්ජාලය ලැබුණු පසු victim ගිණුමෙන් sign in වී යවන්න.'}
+                    ? 'සුරැකි ඉල්ලීම් ස්වයංක්‍රීයව යැවීමට උත්සාහ කරයි.'
+                    : 'අන්තර්ජාලය ලැබුණු පසු ස්වයංක්‍රීයව යැවීමට උත්සාහ කරයි.'}
                 </Text>
               </View>
             </View>

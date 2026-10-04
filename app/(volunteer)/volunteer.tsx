@@ -11,15 +11,14 @@ import {
   RefreshControl,
   TextInput,
   Modal,
-  SafeAreaView,
   ScrollView,
-  Platform,
   AppState,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { FontAwesome5, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { api, clearAuthTokens } from '../../services/api';
-import { useDeliveries } from '../../services/deliveries';
+import { useVolunteerTabs } from '../../services/volunteer-tabs';
 import { DirectionsButton } from '../../components/directions-button';
 
 const SRI_LANKAN_SKILLS = [
@@ -37,7 +36,7 @@ const SRI_LANKAN_SKILLS = [
 
 export default function VolunteerDashboard() {
   const router = useRouter();
-  const goodsDeliveries = useDeliveries();
+  const { setInvitationCount } = useVolunteerTabs();
   const [profile, setProfile] = useState<any>(null);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -121,6 +120,7 @@ export default function VolunteerDashboard() {
       if (currentProfile) {
         const assignmentsRes = await api.post('/volunteer/assignments/sync', {});
         setAssignments(assignmentsRes.data);
+        setInvitationCount(assignmentsRes.data.filter((item: { status: string }) => item.status === 'NOTIFIED').length);
         setLoadError(null);
       }
     } catch (error: any) {
@@ -139,7 +139,7 @@ export default function VolunteerDashboard() {
       setIsLoading(false);
       setRefreshing(false);
     }
-  }, [router]);
+  }, [router, setInvitationCount]);
 
   useFocusEffect(useCallback(() => {
     void fetchDashboardData();
@@ -457,7 +457,7 @@ export default function VolunteerDashboard() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#00897B" />
           <Text style={styles.loadingText}>තොරතුරු ලබාගනිමින් පවතී...</Text>
@@ -469,13 +469,8 @@ export default function VolunteerDashboard() {
   const isAvailable = profile?.available_status || false;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <View style={styles.container}>
-        {goodsDeliveries.data.some(d => d.status !== 'COMPLETED') && (
-          <TouchableOpacity onPress={() => router.push('/(volunteer)/deliveries')} style={{ padding: 14, backgroundColor: '#CCFBF1' }}>
-            <Text style={{ color: '#115E59', fontWeight: '800' }}>📦 භාණ්ඩ බෙදාහැරීම්: {goodsDeliveries.data.filter(d => d.status === 'OPEN').length} නව invitations — බලන්න →</Text>
-          </TouchableOpacity>
-        )}
         {loadError && <Text accessibilityRole="alert" style={styles.statusHeroSub}>{loadError}</Text>}
         {/* --- Header Section (Dark Teal/Slate themed) --- */}
         <View style={styles.header}>
@@ -597,7 +592,7 @@ export default function VolunteerDashboard() {
 
         {/* --- Profile Edit Modal --- */}
         <Modal visible={isProfileModalVisible} animationType="fade" transparent={true}>
-          <View style={styles.modalOverlay}>
+          <SafeAreaView style={styles.modalOverlay}>
             <View style={styles.modalCard}>
               <View style={styles.modalHeader}>
                 <View style={styles.modalHeaderIcon}>
@@ -609,7 +604,7 @@ export default function VolunteerDashboard() {
                 </View>
               </View>
 
-              <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+              <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                 <Text style={styles.inputLabel}>මූලික දිස්ත්‍රික්කය (Base District) *</Text>
                 <View style={styles.modalInputWrapper}>
                   <MaterialIcons name="location-city" size={20} color="#64748B" style={styles.inputIcon} />
@@ -683,7 +678,7 @@ export default function VolunteerDashboard() {
                 </TouchableOpacity>
               )}
             </View>
-          </View>
+          </SafeAreaView>
         </Modal>
       </View>
     </SafeAreaView>
@@ -716,7 +711,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#041F1A',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 35 : 12,
+    paddingTop: 12,
     paddingBottom: 18,
     elevation: 4,
     shadowColor: '#000',
@@ -911,10 +906,13 @@ const styles = StyleSheet.create({
   },
   cardHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   missionIdPill: {
+    maxWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#E0F2F1',
@@ -924,11 +922,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   missionIdText: {
+    flexShrink: 1,
     fontSize: 12,
     fontWeight: '700',
     color: '#00695C',
   },
   statusBadge: {
+    maxWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
@@ -938,6 +938,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statusBadgeText: {
+    flexShrink: 1,
     fontSize: 11,
     fontWeight: '800',
   },
@@ -1152,6 +1153,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalCard: {
+    maxHeight: '100%',
     width: '100%',
     backgroundColor: '#FFFFFF',
     borderRadius: 20,

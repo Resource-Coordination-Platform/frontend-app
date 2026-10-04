@@ -9,7 +9,6 @@ import {
   Alert,
   ActivityIndicator,
   TextInput,
-  SafeAreaView,
   Platform,
   RefreshControl,
   Linking,
@@ -18,6 +17,7 @@ import {
   Image,
   ImageSourcePropType,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome5, MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { api } from '../../services/api';
 
@@ -632,7 +632,7 @@ export default function DonationsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <View style={styles.container}>
         {/* --- Top Header --- */}
         <View style={styles.header}>
@@ -724,7 +724,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#041F1A',
     paddingHorizontal: 18,
-    paddingTop: Platform.OS === 'android' ? 36 : 14,
+    paddingTop: 14,
     paddingBottom: 16,
     elevation: 5,
     shadowColor: '#000',
@@ -981,6 +981,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   locationText: {
+    flexShrink: 1,
     fontSize: 11,
     color: '#475569',
     marginLeft: 4,
@@ -1013,6 +1014,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   statPill: {
+    maxWidth: '100%',
     backgroundColor: '#F1F5F9',
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -1052,6 +1054,8 @@ const styles = StyleSheet.create({
   },
   needsSectionHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 10,

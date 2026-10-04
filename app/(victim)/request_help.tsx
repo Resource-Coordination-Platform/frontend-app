@@ -4,30 +4,6 @@ import { FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import NetInfo from '@react-native-community/netinfo';
 import { NEED_UNITS, newHelpRequestId, enqueueHelpRequest, readOfflineHelpRequests, syncHelpRequests, OfflineHelpRequest, fetchCategories, ResourceCategory, buildUnitsMap } from '../../services/help-requests';
 import * as Location from 'expo-location'; //for location 
-import * as TaskManager from 'expo-task-manager';
-import * as BackgroundFetch from 'expo-background-fetch'; //these 2 for background sent requests
-
-
-
-
-const BACKGROUND_SYNC_TASK = 'background-sync-task';
-
-
-TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
-  try {
-    const netInfo = await NetInfo.fetch();
-    if (!netInfo.isConnected) return BackgroundFetch.BackgroundFetchResult.NoData;
-    const sent = await syncHelpRequests();
-    if (!sent) return BackgroundFetch.BackgroundFetchResult.NoData;
-    return BackgroundFetch.BackgroundFetchResult.NewData;
-  } catch (error) {
-    console.error("Background sync failed:", error);
-    return BackgroundFetch.BackgroundFetchResult.Failed;
-  }
-});
-
-
-
 export default function RequestHelpScreen() {
   const [disasterType, setDisasterType] = useState<string | null>(null);
   const [otherDisaster, setOtherDisaster] = useState(''); // for input other disaster type if user selects 'වෙනත්' (other)
@@ -36,7 +12,6 @@ export default function RequestHelpScreen() {
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [otherUnit, setOtherUnit] = useState('items');
   const [otherNeed, setOtherNeed] = useState(''); // for input other need if user selects 'වෙනත්' (other)
-  
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -200,27 +175,6 @@ export default function RequestHelpScreen() {
 
   ///////////////////////////////////////////////////////////////
 
-  useEffect(() => {
-    // Register the background task
-    async function registerBackgroundFetchAsync() {
-      try {
-        await BackgroundFetch.registerTaskAsync(BACKGROUND_SYNC_TASK, {
-          minimumInterval: 60 * 15, // 15 min each sending
-          stopOnTerminate: false,   // (Android only)
-          startOnBoot: true,        // even phone restart also run this
-        });
-        console.log("Background fetch registered!");
-      } catch (err) {
-        console.log("Background fetch failed to register:", err);
-      }
-    }
-
-    registerBackgroundFetchAsync();
-  }, []);
-
-
-
-
   const toggleNeed = (id: string) => {
     if (selectedNeeds.includes(id)) {
       setSelectedNeeds(selectedNeeds.filter(item => item !== id));
@@ -341,7 +295,7 @@ export default function RequestHelpScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
        {/* network status badge */}
       <View style={{ padding: 8, backgroundColor: isOnline ? '#e6f7ed' : '#ffe6e6', alignItems: 'center', marginBottom: 10 }}>
         <Text style={{ fontWeight: 'bold', color: isOnline ? '#2e7d32' : '#c62828' }}>
@@ -536,7 +490,8 @@ const styles = StyleSheet.create({
   quantityPanel: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginVertical: 12, borderWidth: 1, borderColor: '#dbe4ed' },
   quantityRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
   quantityInput: { width: 90, textAlign: 'center', borderWidth: 1, borderColor: '#94a3b8', borderRadius: 8, padding: 12, fontSize: 18 },
-  container: { flex: 1, backgroundColor: '#f9f9f9', padding: 20 },
+  container: { flex: 1, backgroundColor: '#f9f9f9' },
+  content: { padding: 20, paddingBottom: 32 },
   header: { alignItems: 'center', marginBottom: 20, marginTop: 10 },
   title: { fontSize: 24, fontWeight: 'bold', color: '#333', marginTop: 10 },
   subtitle: { fontSize: 13, color: '#666', textAlign: 'center', marginTop: 5, paddingHorizontal: 10 },

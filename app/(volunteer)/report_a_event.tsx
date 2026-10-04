@@ -9,9 +9,8 @@ import {
   ScrollView,
   ActivityIndicator,
   Image,
-  SafeAreaView,
-  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -157,7 +156,7 @@ export default function ReportEventScreen() {
 
       await api.post('/volunteer/reports', payload);
 
-      Alert.alert('Success!', 'ඔබේ වාර්තාව සාර්ථකව යොමු කළා. ආසන්නතම සහන මධ්‍යස්ථානයට ස්වයංක්‍රීයව යොමු කරා! 🏆');
+      Alert.alert('Success!', 'ඔබේ වාර්තාව අදාළ ග්‍රාම නිලධාරීගේ තහවුරු කිරීම සඳහා යොමු කළා. තහවුරු කළ පසු ආසන්නතම සහන මධ්‍යස්ථානයට යොමු වේ.');
 
       // Clear the form
       setLatitude(null);
@@ -175,17 +174,11 @@ export default function ReportEventScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
       <View style={styles.container}>
         {/* --- Header --- */}
         <View style={styles.header}>
           <View style={styles.headerTopRow}>
-            <View>
-              <Text style={styles.headerTitle}> ආපදාවක් වාර්තා කරන්න</Text>
-            </View>
-            <View style={styles.headerIconCircle}>
-              <MaterialIcons name="add-alert" size={20} color="#80CBC4" />
-            </View>
           </View>
         </View>
 
@@ -305,7 +298,7 @@ export default function ReportEventScreen() {
                     <View style={styles.locationIconCircle}>
                       <MaterialIcons name="my-location" size={22} color="#00897B" />
                     </View>
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={styles.locationBtnTitle}>
                         ස්ථානය ලබාදෙන්න
                       </Text>
@@ -413,7 +406,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#041F1A',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 35 : 12,
+    paddingTop: 12,
     paddingBottom: 18,
     elevation: 4,
     shadowColor: '#000',
@@ -479,6 +472,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   categoryChip: {
+    maxWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#E0F2F1',
@@ -493,6 +487,7 @@ const styles = StyleSheet.create({
     borderColor: '#00796B',
   },
   categoryChipText: {
+    flexShrink: 1,
     fontSize: 12,
     fontWeight: '700',
     color: '#00695C',
@@ -504,10 +499,12 @@ const styles = StyleSheet.create({
   /* --- Severity Row --- */
   severityRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
   severityChip: {
     flex: 1,
+    minWidth: 72,
     alignItems: 'center',
     paddingVertical: 10,
     borderRadius: 10,

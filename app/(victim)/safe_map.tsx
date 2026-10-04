@@ -1,20 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Pressable, Linking, Alert } from 'react-native';
-import MapView, { Marker, type LatLng } from 'react-native-maps';
+import SafeZoneMap from '../../components/safe-zone-map';
+import type { DivisionBoundary, MapCoordinate, MapEvent, SafeMapHandle, SafeZone } from '../../components/safe-map-document';
 import * as Location from 'expo-location';
 import { useFocusEffect } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { api } from '../../services/api';
 
-type SafeZone = { id: string; name: string; lat: number; lng: number; type: string };
-const initialRegion = { latitude: 7.8731, longitude: 80.7718, latitudeDelta: 3.8, longitudeDelta: 3.8 };
-
 export default function SafeMapScreen() {
-  const map = useRef<MapView>(null);
-  const fitted = useRef(false);
+  const map = useRef<SafeMapHandle>(null);
+  const [division, setDivision] = useState<{ division_name: string; boundary: DivisionBoundary } | null>(null);
   const [ready, setReady] = useState(false);
-  const [location, setLocation] = useState<LatLng | null>(null);
-  const [permission, setPermission] = useState(false);
+  const [divisionReady, setDivisionReady] = useState(false);
+  const [location, setLocation] = useState<MapCoordinate | null>(null);
+  const [mapError, setMapError] = useState('');
+  const [mapVersion, setMapVersion] = useState(0);
+  const [cardHeight, setCardHeight] = useState(0);
   const [zones, setZones] = useState<SafeZone[]>([]);
   const [selected, setSelected] = useState<SafeZone | null>(null);
   const [loading, setLoading] = useState(true);
@@ -23,12 +24,15 @@ export default function SafeMapScreen() {
   const [refresh, setRefresh] = useState(0);
 
   useFocusEffect(useCallback(() => {
-    // A refresh restarts both the tenant lookup and foreground location watcher.
+    // Resolve the saved registration division, independent of current GPS.
     void refresh;
     let active = true;
     let subscription: Location.LocationSubscription | undefined;
     let fetching = false;
-    fitted.current = false;
+    setDivision(null);
+    setReady(false);
+    setDivisionReady(false);
+    setMapError('');
     setZones([]);
     setSelected(null);
     setLoading(true);
@@ -36,16 +40,22 @@ export default function SafeMapScreen() {
       if (fetching) return;
       fetching = true;
       try {
-        const response = await api.get<SafeZone[]>('/safe-zones');
+        const response = await api.get<{ division_name: string; boundary: DivisionBoundary; zones: SafeZone[] }>('/safe-zones/victim');
+        if (!response.data.boundary || !['Polygon', 'MultiPolygon'].includes(response.data.boundary.type)) {
+          throw new Error('Missing GN boundary');
+        }
         if (active) {
-          setZones(response.data);
-          setSelected(previous => response.data.find(zone => zone.id === previous?.id) ?? null);
+          setDivision(previous => previous && JSON.stringify(previous.boundary) === JSON.stringify(response.data.boundary)
+            ? { ...previous, division_name: response.data.division_name }
+            : { division_name: response.data.division_name, boundary: response.data.boundary });
+          setZones(response.data.zones);
+          setSelected(previous => response.data.zones.find(zone => zone.id === previous?.id) ?? null);
           setError('');
         }
       } catch (err: any) {
         if (active) {
           setZones([]); setSelected(null);
-          setError(err.response?.status === 409 ? 'ඔබට සහන මධ්‍යස්ථානයක් පවරා නැත.' : 'ආරක්ෂිත ස්ථාන ලබාගත නොහැකි විය. නැවත උත්සාහ කරන්න.');
+          setError(err.response?.status === 409 ? 'ඔබගේ ලියාපදිංචි ස්ථානය සොයාගත නොහැක.' : 'ඔබගේ GN කොට්ඨාසය සහ ආරක්ෂිත ස්ථාන ලබාගත නොහැකි විය. නැවත උත්සාහ කරන්න.');
         }
       } finally {
         fetching = false;
@@ -58,7 +68,6 @@ export default function SafeMapScreen() {
       try {
         const granted = (await Location.requestForegroundPermissionsAsync()).status === 'granted';
         if (!active) return;
-        setPermission(granted);
         if (!granted) {
           setLocation(null);
           setLocationError('ඔබේ ස්ථානය බැලීමට Location අවසර ලබා දෙන්න.');
@@ -78,67 +87,95 @@ export default function SafeMapScreen() {
   }, [refresh]));
 
   const fitZones = useCallback(() => {
-    const points = zones.map(zone => ({ latitude: zone.lat, longitude: zone.lng }));
-    if (location) points.push(location);
-    if (points.length === 1) map.current?.animateToRegion({ ...points[0], latitudeDelta: 0.018, longitudeDelta: 0.018 }, 600);
-    else if (points.length > 1) map.current?.fitToCoordinates(points, { edgePadding: { top: 110, right: 55, bottom: 210, left: 55 }, animated: true });
-  }, [location, zones]);
+    if (division) map.current?.send({ type: 'division', boundary: division.boundary, readOnly: true });
+  }, [division]);
+
+  const boundary = division?.boundary;
+  useEffect(() => {
+    if (ready && boundary) map.current?.send({ type: 'division', boundary, readOnly: true });
+  }, [ready, boundary]);
 
   useEffect(() => {
-    if (!ready || loading || fitted.current || (!zones.length && !location)) return;
-    fitZones();
-    // If GPS is still resolving, fit again once it arrives.
-    if (location || locationError) fitted.current = true;
-  }, [ready, loading, location, locationError, zones, fitZones]);
+    if (ready) map.current?.send({ type: 'update', zones, location });
+  }, [ready, zones, location]);
+
+  useEffect(() => {
+    if (divisionReady || !division) return;
+    const timeout = setTimeout(() => setMapError('සිතියම පූරණය කළ නොහැක. අන්තර්ජාල සම්බන්ධතාව පරීක්ෂා කර නැවත උත්සාහ කරන්න.'), 15000);
+    return () => clearTimeout(timeout);
+  }, [divisionReady, mapVersion, division]);
+
+  const onMapEvent = useCallback((event: MapEvent) => {
+    if (event.type === 'ready') { setReady(true); setMapError(''); }
+    else if (event.type === 'division-ready') setDivisionReady(true);
+    else if (event.type === 'select') setSelected(zones.find(zone => zone.id === event.id) ?? null);
+    else if (event.type === 'clear') setSelected(null);
+    else if (event.type === 'outside') Alert.alert('GN කොට්ඨාසය', 'ඔබගේ වත්මන් ස්ථානය ලියාපදිංචි GN කොට්ඨාසයෙන් පිටත පිහිටා ඇත.');
+    else if (event.type === 'tiles-ok') setMapError('');
+    else if (event.type === 'error') setMapError('සිතියම පූරණය කළ නොහැක. අන්තර්ජාල සම්බන්ධතාව පරීක්ෂා කර නැවත උත්සාහ කරන්න.');
+  }, [zones]);
+
+  const refreshMap = () => {
+    if (mapError || !ready) {
+      setReady(false);
+      setDivisionReady(false);
+      setMapError('');
+      setMapVersion(value => value + 1);
+    }
+    setRefresh(value => value + 1);
+  };
 
   const directions = async () => {
     if (!selected) return;
-    const origin = location ? `&origin=${location.latitude},${location.longitude}` : '';
+    const origin = location ? `${location.latitude},${location.longitude}` : '';
+    const route = encodeURIComponent(`${origin};${selected.lat},${selected.lng}`);
     try {
-      await Linking.openURL(`https://www.google.com/maps/dir/?api=1${origin}&destination=${selected.lat},${selected.lng}`);
+      await Linking.openURL(`https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${route}`);
     } catch { Alert.alert('Directions', 'Maps විවෘත කළ නොහැකි විය. නැවත උත්සාහ කරන්න.'); }
   };
 
   return (
     <View style={styles.container}>
-      <MapView ref={map} style={StyleSheet.absoluteFill} initialRegion={initialRegion}
-        mapType="standard" showsUserLocation={permission} showsMyLocationButton={false}
-        showsCompass onMapReady={() => setReady(true)}
-        onPress={() => setSelected(null)}>
-        {zones.map(zone => <Marker key={zone.id} coordinate={{ latitude: zone.lat, longitude: zone.lng }}
-          title={zone.name} description={zone.type === 'medical' ? 'වෛද්‍ය මධ්‍යස්ථානය' : 'සහන කඳවුර'}
-          pinColor={zone.type === 'medical' ? '#ef4444' : '#059669'}
-          onPress={event => { event.stopPropagation(); setSelected(zone); }} />)}
-      </MapView>
       <View style={styles.header}>
         <Text style={styles.title}>ආරක්ෂිත ස්ථාන</Text>
-        <Text style={styles.subtitle}>ඔබේ සහන මධ්‍යස්ථානය එක් කළ ස්ථාන {zones.length}ක්</Text>
+        <Text style={styles.divisionLabel}>ඔබ අයත් GN කොට්ඨාසය</Text>
+        <Text style={styles.divisionName}>{division?.division_name || 'කොට්ඨාසය සොයමින්...'}</Text>
+        <Text style={styles.subtitle}>ආරක්ෂිත ස්ථාන {zones.length}ක් · ඔබගේ කොට්ඨාසය තුළ පමණි</Text>
         <Text style={styles.legend}>🟢 සහන කඳවුරු   🔴 වෛද්‍ය මධ්‍යස්ථාන</Text>
-        {loading && <ActivityIndicator color="#059669" style={{ marginTop: 8 }} />}
+        {(loading || (division && !divisionReady && !mapError)) && <ActivityIndicator color="#059669" style={{ marginTop: 8 }} />}
+        {!!mapError && <Text accessibilityRole="alert" style={styles.error}>{mapError}</Text>}
         {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
         {!!locationError && <Text style={styles.error}>{locationError}</Text>}
         {!loading && !error && !zones.length && <Text style={styles.subtitle}>තවමත් ආරක්ෂිත ස්ථාන එක් කර නැත.</Text>}
       </View>
-      <View style={styles.controls}>
-        <Pressable accessibilityLabel="Show all safe zones" onPress={fitZones} style={styles.control}><FontAwesome5 name="expand" size={19} color="#0f172a" /></Pressable>
+      <View style={styles.mapFrame}>
+      {division && <SafeZoneMap key={mapVersion} ref={map} onEvent={onMapEvent} />}
+      {division && !divisionReady && <View style={styles.mapCover} />}
+      <View style={[styles.controls, { bottom: selected ? cardHeight + 30 : 24 }]}>
+        <Pressable accessibilityLabel="Show my GN division" onPress={fitZones} style={styles.control}><FontAwesome5 name="expand" size={19} color="#0f172a" /></Pressable>
         <Pressable accessibilityLabel="My current location" onPress={() => {
-          if (location) map.current?.animateToRegion({ ...location, latitudeDelta: 0.012, longitudeDelta: 0.012 }, 500);
-          else setRefresh(value => value + 1);
+          if (location && ready) map.current?.send({ type: 'locate', location });
+          else refreshMap();
         }} style={styles.control}><FontAwesome5 name="location-arrow" size={19} color="#2563eb" /></Pressable>
-        <Pressable accessibilityLabel="Refresh safe zones and location" onPress={() => setRefresh(value => value + 1)} style={styles.control}><FontAwesome5 name="sync-alt" size={18} color="#059669" /></Pressable>
+        <Pressable accessibilityLabel="Refresh safe zones and location" onPress={refreshMap} style={styles.control}><FontAwesome5 name="sync-alt" size={18} color="#059669" /></Pressable>
       </View>
-      {selected && <View style={styles.card}>
+      {selected && <View style={styles.card} onLayout={event => setCardHeight(event.nativeEvent.layout.height)}>
         <Text style={styles.title}>{selected.name}</Text>
         <Text style={styles.subtitle}>{selected.type === 'medical' ? 'වෛද්‍ය මධ්‍යස්ථානය' : 'සහන කඳවුර'}</Text>
-        <Pressable style={styles.button} onPress={directions}><FontAwesome5 name="directions" color="white" size={20} /><Text style={styles.buttonText}>මාර්ගය බලන්න · Google Maps</Text></Pressable>
+        <Pressable style={styles.button} onPress={directions}><FontAwesome5 name="directions" color="white" size={20} /><Text style={styles.buttonText}>මාර්ගය බලන්න · OpenStreetMap</Text></Pressable>
       </View>}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#e2e8f0' },
-  header: { position: 'absolute', top: 14, left: 14, right: 14, padding: 16, borderRadius: 18, backgroundColor: '#ffffff', elevation: 5, shadowColor: '#0f172a', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+  mapCover: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: '#e2e8f0' },
+  header: { margin: 14, marginBottom: 10, padding: 16, borderRadius: 18, backgroundColor: '#ffffff', elevation: 5, shadowColor: '#0f172a', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+  mapFrame: { flex: 1, marginHorizontal: 14, marginBottom: 14, borderRadius: 18, overflow: 'hidden' },
+  divisionLabel: { fontSize: 12, color: '#475569', marginTop: 12 },
+  divisionName: { fontSize: 21, fontWeight: '800', color: '#1d4ed8', marginTop: 4 },
   title: { fontSize: 19, fontWeight: '700', color: '#0f172a' },
   subtitle: { fontSize: 13, color: '#64748b', marginTop: 5 },
   legend: { fontSize: 12, color: '#475569', marginTop: 10 },
@@ -147,5 +184,5 @@ const styles = StyleSheet.create({
   control: { width: 46, height: 46, borderRadius: 14, backgroundColor: 'white', alignItems: 'center', justifyContent: 'center', elevation: 4 },
   card: { position: 'absolute', bottom: 20, left: 14, right: 14, borderRadius: 18, padding: 18, backgroundColor: 'white', elevation: 6 },
   button: { marginTop: 14, borderRadius: 12, backgroundColor: '#059669', padding: 14, flexDirection: 'row', gap: 10, justifyContent: 'center', alignItems: 'center' },
-  buttonText: { color: 'white', fontWeight: '700', fontSize: 14 },
+  buttonText: { flexShrink: 1, textAlign: 'center', color: 'white', fontWeight: '700', fontSize: 14 },
 });

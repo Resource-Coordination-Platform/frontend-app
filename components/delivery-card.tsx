@@ -373,10 +373,13 @@ const styles = StyleSheet.create({
   },
   cardHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   districtBadge: {
+    maxWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#CCFBF1',
@@ -386,11 +389,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   districtText: {
+    flexShrink: 1,
     color: '#0F766E',
     fontWeight: '700',
     fontSize: 12,
   },
   statusBadge: {
+    maxWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 9,
@@ -399,6 +404,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statusText: {
+    flexShrink: 1,
     fontWeight: '700',
     fontSize: 12,
   },

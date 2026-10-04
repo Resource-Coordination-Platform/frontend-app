@@ -9,9 +9,6 @@ import {
   RefreshControl,
   TouchableOpacity,
   Alert,
-  SafeAreaView,
-  Platform,
-  StatusBar,
 } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -149,6 +146,7 @@ export default function VictimHomeScreen() {
   const renderItem = ({ item }: { item: any }) => {
     const isCompleted = isCompletedItem(item);
     const statusData = getStatusBadge(item.status);
+    if (item.gn_review_status === 'pending') statusData.text = 'Awaiting Grama Niladhari verification';
     const delivery = deliveries.data.find(d => d.victim_request_id === item.id);
     const lastUpdatedText = formatLastUpdated(delivery?.updated_at || item.updated_at);
     
@@ -157,6 +155,7 @@ export default function VictimHomeScreen() {
     
     return (
       <View style={[styles.card, isCompleted && styles.completedCardBorder]}>
+        {!!item.gn_review_note && <Text style={{ color: '#475569', padding: 12 }}>GN review: {item.gn_review_note}</Text>}
         <View style={styles.cardHeader}>
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
             <View
@@ -215,8 +214,7 @@ export default function VictimHomeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+    <View style={styles.safeArea}>
       <View style={styles.container}>
         {/* --- Top Bar: 2 Tabs + Logout on 1 Single Line --- */}
         <View style={styles.topBar}>
@@ -232,7 +230,7 @@ export default function VictimHomeScreen() {
             />
             <Text
               style={[styles.tabButtonText, selectedTab === 'active' && styles.tabButtonTextActive]}
-              numberOfLines={1}
+              numberOfLines={2}
               ellipsizeMode="tail"
             >
               වත්මන් ඉල්ලීම් ({activeRequests.length})
@@ -254,7 +252,7 @@ export default function VictimHomeScreen() {
                 styles.tabButtonText,
                 selectedTab === 'history' && styles.tabButtonTextActive,
               ]}
-              numberOfLines={1}
+              numberOfLines={2}
               ellipsizeMode="tail"
             >
               ඉතිහාසය ({completedRequests.length})
@@ -335,7 +333,7 @@ export default function VictimHomeScreen() {
           />
         )}
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -348,7 +346,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'nowrap',
     paddingHorizontal: 12,
-    paddingTop: Platform.OS === 'android' ? 36 : 14,
+    paddingTop: 14,
     paddingBottom: 10,
     backgroundColor: '#F8FAFC',
     gap: 8,
@@ -406,7 +404,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     gap: 8,
   },
-  statusText: { fontSize: 14, fontWeight: '700' },
+  statusText: { flex: 1, fontSize: 14, fontWeight: '700' },
 
   deliveryContainer: {
     marginTop: 4,
@@ -422,6 +420,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   deliverySectionTitle: {
+    flex: 1,
     fontSize: 12,
     fontWeight: '700',
     color: '#0F766E',
@@ -453,6 +452,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   errorBannerText: {
+    flex: 1,
     color: '#B91C1C',
     fontSize: 12,
     fontWeight: '600',
@@ -468,6 +468,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   tabButton: {
+    minHeight: 44,
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -495,6 +496,7 @@ const styles = StyleSheet.create({
     borderColor: '#15803D',
   },
   tabButtonText: {
+    textAlign: 'center',
     fontSize: 12,
     fontWeight: '700',
     color: '#64748B',
