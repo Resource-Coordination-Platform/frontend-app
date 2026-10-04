@@ -1,16 +1,26 @@
 import { Tabs } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { FontAwesome5, MaterialIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function VictimTabLayout() {
+  const insets = useSafeAreaInsets();
+  const bottomPadding = Math.max(insets.bottom, 10);
+
   return (
+    <>
+    <StatusBar style="light" />
     <Tabs 
       screenOptions={{
         tabBarActiveTintColor: '#E53935', // red theme
         tabBarInactiveTintColor: '#757575',
         headerShown: true, // for showing the header in each tab
-        headerStyle: { backgroundColor: '#E53935' },
+        headerTitle: '',
+        headerStyle: { backgroundColor: '#E53935', height: insets.top + 28 },
         headerTintColor: '#fff',
-        tabBarStyle: { paddingBottom: 5, height: 60 }
+        tabBarLabelPosition: 'below-icon',
+        tabBarStyle: { paddingTop: 8, paddingBottom: bottomPadding, height: 56 + bottomPadding },
+        sceneStyle: { paddingLeft: insets.left, paddingRight: insets.right },
       }}
     >
       <Tabs.Screen
@@ -46,5 +56,6 @@ export default function VictimTabLayout() {
         }}
       />
     </Tabs>
+    </>
   );
 }

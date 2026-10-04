@@ -34,6 +34,7 @@ export default function Index() {
 
   // if logged in navigate to dashboard by userRole
   if (isLoggedIn) {
+    if (userRole?.toUpperCase() === 'GRAMA_NILADHARI') return <Redirect href="/grama-niladhari" />;
     return userRole?.toUpperCase() === 'VOLUNTEER' ? <Redirect href="/volunteer" /> : <Redirect href="/victim" />;
   }
 

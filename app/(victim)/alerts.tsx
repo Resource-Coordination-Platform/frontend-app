@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, AppState } from 'react-native';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { api, getAccessToken } from '../../services/api';
@@ -9,9 +9,22 @@ export default function AlertsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const isMountedRef = useRef(true);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isConnectingRef = useRef(false);
 
-  const IP_ADDRESS = '192.168.8.161';
-  const WS_URL = `ws://${process.env.EXPO_PUBLIC_BACKEND_URL?.split(':')[1]?.split('/')[2]}:8000/ws`;
+  const MAX_RECONNECT_ATTEMPTS = 20;
+  const BASE_RECONNECT_DELAY = 3000;   // 3s
+  const MAX_RECONNECT_DELAY = 30000;   // 30s
+
+  // Derive WebSocket URL cleanly from EXPO_PUBLIC_BACKEND_URL
+  const getWsUrl = (token?: string) => {
+    const raw = (process.env.EXPO_PUBLIC_BACKEND_URL || 'http://192.168.8.161:8000/api').trim();
+    const base = raw.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+    const wsBase = base.replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:');
+    const endpoint = `${wsBase}/ws`;
+    return token ? `${endpoint}?token=${encodeURIComponent(token)}` : endpoint;
+  };
 
   const fetchAlerts = async () => {
     try {
@@ -25,57 +38,143 @@ export default function AlertsScreen() {
     }
   };
 
+  // Force-refresh the access token before opening a new WS connection.
+  // The interceptor on `api` handles the actual refresh flow; we just
+  // make a lightweight authenticated call so the interceptor refreshes
+  // a stale token, then read the (now-fresh) token from secure storage.
+  const getFreshToken = async (): Promise<string | null> => {
+    try {
+      // First try the stored token directly
+      let token = await getAccessToken();
+      if (!token) return null;
+
+      // Validate by making a lightweight call — the axios response
+      // interceptor will silently refresh if the token is expired.
+      try {
+        await api.get('/alerts', { params: { limit: 1 } });
+      } catch {
+        // The interceptor may have refreshed; grab the updated token
+      }
+
+      // Re-read: if the interceptor refreshed, SecureStore now holds
+      // the new access_token.
+      token = await getAccessToken();
+      return token;
+    } catch {
+      return null;
+    }
+  };
+
+  const scheduleReconnect = () => {
+    if (!isMountedRef.current) return;
+    if (reconnectAttemptRef.current >= MAX_RECONNECT_ATTEMPTS) {
+      console.log("🛑 Max reconnect attempts reached. Giving up. Pull-to-refresh to retry.");
+      return;
+    }
+
+    // Exponential backoff: 3s, 6s, 12s, 24s, 30s (capped)
+    const delay = Math.min(
+      BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttemptRef.current),
+      MAX_RECONNECT_DELAY
+    );
+    reconnectAttemptRef.current += 1;
+
+    console.log(`🔄 Auto-reconnecting in ${delay / 1000}s... (attempt ${reconnectAttemptRef.current}/${MAX_RECONNECT_ATTEMPTS})`);
+
+    reconnectTimerRef.current = setTimeout(() => {
+      if (isMountedRef.current) {
+        connectWebSocket();
+      }
+    }, delay);
+  };
+
   const connectWebSocket = async () => {
-    //If Already connected then skip
+    // Prevent overlapping connection attempts
+    if (isConnectingRef.current) {
+      console.log("⏳ Connection attempt already in progress, skipping");
+      return;
+    }
+    // If already connected then skip
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       console.log("✅ WS already connected, skipping");
       return;
     }
 
-    const token = await getAccessToken();
-    if (!token || !isMountedRef.current) return;
+    isConnectingRef.current = true;
 
-    const ws = new WebSocket(WS_URL, ['bearer', token]);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      console.log("✅ WebSocket Connected Successfully!");
-    };
-
-   ws.onmessage = (event) => {
     try {
-      const data = JSON.parse(event.data);
-      if (data.type === 'alert') {
-        setAlerts((prev) => {
-          // skip if alert already exists in the list (based on id)
-          if (prev.some((a) => String(a.id) === String(data.id))) return prev;
-          return [data, ...prev];
-        });
+      // Always get a fresh token (will trigger silent refresh if expired)
+      const token = await getFreshToken();
+      if (!token || !isMountedRef.current) {
+        console.warn("⚠️ No valid token for WS connection");
+        isConnectingRef.current = false;
+        scheduleReconnect();
+        return;
       }
-    } catch (e) {
-      console.error("WebSocket Message Parsing Error:", e);
-    }
-  };
 
+      const wsUrl = getWsUrl(token);
+      console.log("🔗 Connecting WebSocket to:", wsUrl);
 
-    ws.onerror = (e: any) => {
-      console.error("❌ WebSocket Error");
-    };
+      // Pass token in both query param and subprotocol
+      const ws = new WebSocket(wsUrl, ['bearer', token]);
+      wsRef.current = ws;
 
-    ws.onclose = (e) => {
-      console.log("⚠️ WS Closed:", e.code, e.reason);
-      wsRef.current = null;
-      
-      // if compenent mounted then try to reconnect after 3 seconds
-      if (isMountedRef.current) {
-        console.log("🔄 Auto-reconnecting in 3s...");
-        setTimeout(() => {
-          if (isMountedRef.current) {
-            connectWebSocket();
+      ws.onopen = () => {
+        console.log("✅ WebSocket Connected Successfully to Alerts channel!");
+        reconnectAttemptRef.current = 0; // Reset backoff on successful connection
+        isConnectingRef.current = false;
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log("📩 Received WebSocket Event:", data);
+          if (data.type === 'alert') {
+            setAlerts((prev) => {
+              // skip/update if alert already exists in the list (based on id)
+              if (prev.some((a) => String(a.id) === String(data.id))) {
+                return prev.map((a) => (String(a.id) === String(data.id) ? { ...a, ...data } : a));
+              }
+              return [data, ...prev];
+            });
+          } else if (data.type === 'alert_status_updated') {
+            setAlerts((prev) =>
+              prev.map((a) => (String(a.id) === String(data.id) ? { ...a, status: data.status } : a))
+            );
+          } else if (data.type === 'alert_deleted') {
+            setAlerts((prev) => prev.filter((a) => String(a.id) !== String(data.id)));
+          } else if (data.type === 'force_logout') {
+            console.log("🔒 Force logout received:", data.reason);
+            // Optionally handle force logout (navigate to login, etc.)
           }
-        }, 3000);
-      }
-    };
+        } catch (e) {
+          console.error("WebSocket Message Parsing Error:", e);
+        }
+      };
+
+      ws.onerror = (e: any) => {
+        console.error("❌ WebSocket Error:", e?.message || e);
+        isConnectingRef.current = false;
+      };
+
+      ws.onclose = (e) => {
+        console.log("⚠️ WS Closed:", e.code, e.reason);
+        wsRef.current = null;
+        isConnectingRef.current = false;
+
+        // 1011 = server internal error (gateway can't reach RTO upstream)
+        // 1008 = policy violation (typically bad/expired token)
+        if (e.code === 1008) {
+          console.log("🔑 Token rejected by server, will refresh before reconnect");
+        }
+
+        scheduleReconnect();
+      };
+    } catch (error: any) {
+      console.error("❌ Failed to set up WebSocket:", error?.message || error);
+      isConnectingRef.current = false;
+      scheduleReconnect();
+    }
   };
 
   useEffect(() => {
@@ -83,11 +182,12 @@ export default function AlertsScreen() {
     fetchAlerts();
     connectWebSocket();
 
-    // App background/foreground detect — if app comes to foreground then reconnect WS if not connected
+    // App background/foreground detect — reconnect WS if needed
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active' && isMountedRef.current) {
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
           console.log("📱 App came to foreground, reconnecting WS...");
+          reconnectAttemptRef.current = 0; // Reset backoff on foreground
           connectWebSocket();
         }
       }
@@ -96,6 +196,10 @@ export default function AlertsScreen() {
     return () => {
       isMountedRef.current = false;
       subscription.remove();
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
@@ -103,14 +207,17 @@ export default function AlertsScreen() {
     };
   }, []);
 
-
   const onRefresh = () => {
     setRefreshing(true);
     fetchAlerts();
+    // Reset reconnect counter so user can manually recover
+    reconnectAttemptRef.current = 0;
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      connectWebSocket();
+    }
   };
 
-
-  // style acording to severity of the alert (HIGH, MEDIUM, LOW)
+  // style according to severity of the alert (HIGH, MEDIUM, LOW)
   const getSeverityStyle = (severity: string) => {
     switch (severity) {
       case 'HIGH':
@@ -124,20 +231,51 @@ export default function AlertsScreen() {
 
   const renderItem = ({ item }: { item: any }) => {
     const sevStyle = getSeverityStyle(item.severity);
+    const isClosed = item.status === 'CLOSED';
 
     return (
-      <View style={[styles.alertCard, { backgroundColor: sevStyle.bgColor, borderColor: sevStyle.color }]}>
+      <View
+        style={[
+          styles.alertCard,
+          {
+            backgroundColor: isClosed ? '#F5F5F5' : sevStyle.bgColor,
+            borderColor: isClosed ? '#BDBDBD' : sevStyle.color,
+            opacity: isClosed ? 0.75 : 1,
+          },
+        ]}
+      >
         <View style={styles.alertHeader}>
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-            <MaterialIcons name={sevStyle.icon as any} size={24} color={sevStyle.color} />
-            <Text style={[styles.alertTitle, { color: sevStyle.color }]}> {item.title}</Text>
+            <MaterialIcons
+              name={sevStyle.icon as any}
+              size={24}
+              color={isClosed ? '#757575' : sevStyle.color}
+            />
+            <Text
+              style={[
+                styles.alertTitle,
+                { color: isClosed ? '#424242' : sevStyle.color },
+              ]}
+            >
+              {' '}
+              {item.title}
+            </Text>
           </View>
+          {isClosed ? (
+            <View style={styles.closedBadge}>
+              <Text style={styles.closedBadgeText}>අවසන් (CLOSED)</Text>
+            </View>
+          ) : (
+            <View style={[styles.liveBadge, { backgroundColor: sevStyle.color }]}>
+              <Text style={styles.liveBadgeText}>LIVE</Text>
+            </View>
+          )}
         </View>
 
         <Text style={styles.alertMessage}>{item.message}</Text>
-        
+
         <Text style={styles.dateText}>
-           {new Date(item.created_at).toLocaleString()}
+          {new Date(item.created_at).toLocaleString()}
         </Text>
       </View>
     );
@@ -179,5 +317,28 @@ const styles = StyleSheet.create({
   alertMessage: { fontSize: 14, color: '#333', lineHeight: 20, marginBottom: 10 },
   dateText: { fontSize: 11, color: '#666', textAlign: 'right' },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 },
-  emptyText: { marginTop: 15, fontSize: 15, color: '#999' }
+  emptyText: { marginTop: 15, fontSize: 15, color: '#999' },
+  liveBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  liveBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  closedBadge: {
+    backgroundColor: '#757575',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  closedBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
 });
